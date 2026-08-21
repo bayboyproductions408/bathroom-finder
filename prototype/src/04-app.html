@@ -1,0 +1,621 @@
+<script>
+/* ===================== helpers ===================== */
+const $ = s => document.querySelector(s);
+const el = id => document.getElementById(id);
+const esc = s => String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+const byId = id => DATA.find(b => b.id === id);
+const avColor = name => AV[[...name].reduce((a,c)=>a+c.charCodeAt(0),0) % AV.length];
+const initials = name => name.split(' ').map(w=>w[0]).slice(0,2).join('');
+
+function starsHTML(v, size){
+  let s = `<span class="stars" style="--sz:${size}px" aria-label="${v} out of 5">`;
+  for(let i=1;i<=5;i++){
+    const full = v >= i - .25;
+    const half = !full && v >= i - .75;
+    s += `<svg viewBox="0 0 24 24" style="width:${size}px;height:${size}px;color:${full||half?'var(--star)':'var(--line)'}" fill="${full?'currentColor':half?'url(#halfg)':'none'}" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="m12 3.8 2.5 5.1 5.6.8-4.05 3.95.96 5.6L12 16.6l-5.01 2.65.96-5.6L3.9 9.7l5.6-.8L12 3.8Z"/></svg>`;
+  }
+  return s + '</span>';
+}
+function pillHTML(b){
+  const a = ACCESS[b.access];
+  return `<span class="pill ${a.cls}">${a.icon}${a.label}</span>`;
+}
+
+/* ===================== state ===================== */
+const state = {
+  screen:'map', prev:'map', detail:null, sel:null,
+  filters:new Set(), q:'', sort:'dist',
+  saved:new Set(['b2','b4']), helpful:new Set(), confirmed:new Set()
+};
+try{ const s = localStorage.getItem('bf.saved'); if(s) state.saved = new Set(JSON.parse(s)); }catch(e){}
+const persist = () => { try{ localStorage.setItem('bf.saved', JSON.stringify([...state.saved])); }catch(e){} };
+
+function visible(){
+  let list = DATA.filter(b=>{
+    for(const f of state.filters){ const F = FILTERS.find(x=>x.id===f); if(F && !F.test(b)) return false; }
+    if(state.q){
+      const q = state.q.toLowerCase();
+      if(!(b.name+' '+b.kind+' '+b.addr).toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+  const sorters = {
+    dist:(a,b)=>a.dist-b.dist,
+    rating:(a,b)=>b.rating-a.rating || a.dist-b.dist,
+    clean:(a,b)=>b.scores.clean-a.scores.clean || a.dist-b.dist
+  };
+  return list.sort(sorters[state.sort]);
+}
+
+/* ===================== toasts ===================== */
+function toast(msg, icon){
+  const host = el('toasts');
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.innerHTML = (icon || I.check) + `<span>${msg}</span>`;
+  host.appendChild(t);
+  setTimeout(()=>{ t.classList.add('out'); setTimeout(()=>t.remove(), 250); }, 2400);
+}
+
+/* ===================== map ===================== */
+function renderMap(){
+  const W = 360, H = 640;
+  let blocks = '';
+  for(let y = 24; y < H; y += 78){
+    for(let x = 4; x < W; x += 74){
+      const w = 60 + ((x+y) % 3) * 2, h = 62 + ((x*y) % 4);
+      blocks += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="var(--map-block)"/>`;
+    }
+  }
+  const pins = visible().map(b=>{
+    const a = ACCESS[b.access];
+    const c = {open:'var(--open)', code:'var(--code)', ask:'var(--ask)', locked:'var(--locked)'}[a.cls];
+    return `<g class="pin" data-pin="${b.id}" data-sel="${state.sel===b.id}" transform="translate(${b.x},${b.y})" role="button" tabindex="0" aria-label="${esc(b.name)}, ${a.label}, ${b.rating} stars">
+        <g class="pin-body">
+          <path d="M0 4c-8.6 0-15.6 6.9-15.6 15.4C-15.6 30 0 46 0 46s15.6-16 15.6-26.6C15.6 10.9 8.6 4 0 4Z" transform="translate(0,-46)" fill="${c}" stroke="#fff" stroke-width="2.4"/>
+          <circle cx="0" cy="-26.6" r="8.2" fill="#fff" opacity=".92"/>
+          <text class="pin-label" x="0" y="-23" text-anchor="middle" fill="${c}" style="font-size:${b.count?'9.5px':'7.5px'}">${b.count ? b.rating.toFixed(1) : 'NEW'}</text>
+        </g>
+      </g>`;
+  }).join('');
+
+  el('map').innerHTML = `
+  <svg class="mapsvg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" aria-label="Map of nearby bathrooms">
+    <defs>
+      <linearGradient id="halfg" x1="0" x2="1"><stop offset="50%" stop-color="currentColor"/><stop offset="50%" stop-color="transparent"/></linearGradient>
+    </defs>
+    <rect width="${W}" height="${H}" fill="var(--map-road)"/>
+    ${blocks}
+    <path d="M-10 84 C 80 58, 170 116, 250 90 S 350 46, 380 62" stroke="var(--map-water)" stroke-width="46" fill="none" stroke-linecap="round"/>
+    <rect x="40" y="296" width="140" height="128" rx="6" fill="var(--map-park)"/>
+    <path d="M52 410 C 96 372, 120 344, 168 306" stroke="var(--map-road-2)" stroke-width="7" fill="none" stroke-dasharray="7 6"/>
+    <path d="M-10 250 L 380 470" stroke="var(--map-road)" stroke-width="17" fill="none"/>
+    <g fill="var(--ink-3)" font-family="Public Sans" font-size="8.5" font-weight="700" letter-spacing="1.4" opacity=".65">
+      <text x="14" y="358" transform="rotate(-90 14 358)">MARINE WAY</text>
+      <text x="196" y="232" transform="rotate(-90 196 232)">5TH AVE</text>
+      <text x="30" y="176">NOLAN ST</text>
+      <text x="212" y="490">HARBOR BLVD</text>
+      <text x="66" y="330" fill="var(--open)" opacity=".9">HARBORVIEW PARK</text>
+    </g>
+    <g transform="translate(168,332)">
+      <circle class="me-ring" r="9" fill="#3A6EA5" opacity=".35"/>
+      <circle r="7.5" fill="#3A6EA5" stroke="#fff" stroke-width="2.6"/>
+    </g>
+    ${pins}
+  </svg>`;
+
+  el('map').querySelectorAll('[data-pin]').forEach(p=>{
+    const open = ()=>{ state.sel = p.dataset.pin; openDetail(p.dataset.pin); };
+    p.addEventListener('click', open);
+    p.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); }});
+  });
+}
+
+/* ===================== rows ===================== */
+function rowHTML(b){
+  const [sc, tone] = b.scenes[0];
+  const saved = state.saved.has(b.id);
+  const rating = b.count
+    ? `<span class="rating-inline"><b class="num">${b.rating.toFixed(1)}</b>${starsHTML(b.rating,11)}<span class="num">(${b.count})</span></span>`
+    : `<span class="pill ghost">${I.sparkle} New · needs 2 confirmations</span>`;
+  return `<button class="row" data-open="${b.id}">
+    <span class="thumb">${photoArt(sc, tone, 120, 120)}</span>
+    <span>
+      <h3>${esc(b.name)}</h3>
+      <span class="meta">${rating}</span>
+      <span class="meta" style="margin-top:6px">${pillHTML(b)}<span class="sep">·</span>${esc(b.kind.split(' · ')[0])}</span>
+    </span>
+    <span class="tail">
+      <span class="dist num">${b.dist} mi</span>
+      <span class="dist num" style="font-weight:400">${b.walk} min</span>
+      <span class="savebtn" role="button" tabindex="0" data-save="${b.id}" aria-pressed="${saved}" aria-label="Save ${esc(b.name)}">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="${saved?'currentColor':'none'}" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m12 3.6 2.6 5.3 5.9.85-4.25 4.15 1 5.85L12 17l-5.25 2.75 1-5.85L3.5 9.75l5.9-.85L12 3.6Z"/></svg>
+      </span>
+    </span>
+  </button>`;
+}
+function wireRows(root){
+  root.querySelectorAll('[data-open]').forEach(r=>{
+    r.addEventListener('click', e=>{
+      if(e.target.closest('[data-save]')) return;
+      openDetail(r.dataset.open);
+    });
+  });
+  root.querySelectorAll('[data-save]').forEach(s=>{
+    const go = e => { e.stopPropagation(); toggleSave(s.dataset.save); };
+    s.addEventListener('click', go);
+    s.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(e); }});
+  });
+}
+function toggleSave(id){
+  const b = byId(id);
+  if(state.saved.has(id)){ state.saved.delete(id); toast(`Removed ${b.name.split(',')[0]} from Saved`, I.x); }
+  else { state.saved.add(id); toast(`Saved ${b.name.split(',')[0]}`, I.star(true)); }
+  persist(); refreshAll();
+}
+
+/* ===================== lists ===================== */
+function renderLists(){
+  const list = visible();
+  el('sheet-count').textContent = `${list.length} bathroom${list.length===1?'':'s'} nearby`;
+  const body = list.length ? list.map(rowHTML).join('')
+    : `<div class="empty"><h3>Nothing matches those filters</h3><p>Try dropping a filter — or add the bathroom yourself so the next person finds it.</p></div>`;
+  el('sheet-list').innerHTML = body;
+  el('list-body').innerHTML = `<div style="padding:8px 4px 4px" class="label">${list.length} results · sorted by ${state.sort==='dist'?'distance':state.sort==='rating'?'rating':'cleanliness'}</div>` + body;
+  wireRows(el('sheet-list')); wireRows(el('list-body'));
+
+  const sv = [...state.saved].map(byId).filter(Boolean);
+  el('savecount').textContent = sv.length;
+  el('savecount').style.display = sv.length ? 'grid' : 'none';
+  el('saved-body').innerHTML = sv.length ? sv.map(rowHTML).join('')
+    : `<div class="empty">${I.star(false)}<h3>No saved bathrooms yet</h3><p>Tap the star on any bathroom and it lands here — handy for the one near work you always forget the name of.</p></div>`;
+  el('saved-sub').textContent = sv.length ? `${sv.length} place${sv.length===1?'':'s'} on your go-to list.` : 'Your go-to list, always one tap away.';
+  wireRows(el('saved-body'));
+}
+
+/* ===================== chips ===================== */
+function renderChips(){
+  const html = FILTERS.map(f=>`<button class="chip" data-filter="${f.id}" aria-pressed="${state.filters.has(f.id)}">${f.label}</button>`).join('');
+  ['chips','chips2'].forEach(id=>{
+    el(id).innerHTML = html;
+    el(id).querySelectorAll('[data-filter]').forEach(c=>c.addEventListener('click', ()=>{
+      const f = c.dataset.filter;
+      state.filters.has(f) ? state.filters.delete(f) : state.filters.add(f);
+      refreshAll();
+    }));
+  });
+}
+
+/* ===================== detail ===================== */
+function reviewHTML(b, r, i){
+  const key = b.id + ':' + i;
+  const on = state.helpful.has(key);
+  const col = r.color || avColor(r.u);
+  return `<article class="review">
+    <div class="rhead">
+      <div class="avatar" style="background:${col}">${esc(initials(r.u))}</div>
+      <div style="flex:1">
+        <div class="rname">${esc(r.u)}</div>
+        <div class="rmeta"><span class="rlevel">${r.lv}</span><span>${r.when}</span></div>
+      </div>
+      ${starsHTML(r.st,14)}
+    </div>
+    <p class="rbody">${esc(r.txt)}</p>
+    ${r.tags?.length ? `<div class="rtags">${r.tags.map(t=>`<span class="rtag">${esc(t)}</span>`).join('')}</div>` : ''}
+    ${r.scenes?.length ? `<div class="rphotos">${r.scenes.map(([s,t],j)=>`<button data-photo="${b.id}|${s}|${t}|${esc(r.u)}">${photoArt(s,t,160,160)}</button>`).join('')}</div>` : ''}
+    <div class="rfoot">
+      <button class="minibtn" data-helpful="${key}" aria-pressed="${on}">${I.up} Helpful <span class="num">${r.helpful + (on?1:0)}</span></button>
+      <button class="minibtn" data-reply="${esc(r.u)}">${I.bubble} Reply</button>
+    </div>
+    ${r.reply ? `<div class="reply"><div class="rname">${esc(r.reply.u)}</div><p class="rbody">${esc(r.reply.txt)}</p></div>` : ''}
+  </article>`;
+}
+
+function renderDetail(id, keepScroll){
+  const b = byId(id);
+  if(!b) return;
+  const prevScroll = keepScroll ? el('detail-body').scrollTop : 0;
+  const a = ACCESS[b.access];
+  const allScenes = b.scenes.concat(b.reviews.flatMap(r=>r.scenes||[]));
+  const saved = state.saved.has(b.id);
+  const confirmed = state.confirmed.has(b.id);
+  const scoreRows = [['Cleanliness','clean'],['Privacy','privacy'],['Supplies','supplies'],['No wait','wait']]
+    .map(([lbl,k])=>`<div class="score"><span>${lbl}</span><span class="bar"><i style="width:${b.scores[k]/5*100}%"></i></span><b class="num">${b.scores[k].toFixed(1)}</b></div>`).join('');
+
+  el('detail-body').innerHTML = `
+  <div class="hero">
+    <div class="strip">${allScenes.map(([s,t])=>`<button data-photo="${b.id}|${s}|${t}|the community">${photoArt(s,t,420,300)}</button>`).join('')}</div>
+    <div class="hero-fade"></div>
+    <div class="hero-nav">
+      <button class="circbtn" id="btn-back" aria-label="Back">${I.back}</button>
+      <div style="display:flex; gap:8px">
+        <button class="circbtn" data-act="share" aria-label="Share">${I.share}</button>
+        <button class="circbtn" data-act="save" aria-label="Save" style="${saved?'background:var(--star);color:#231a05':''}">${I.star(saved)}</button>
+      </div>
+    </div>
+    <span class="hero-count num">${allScenes.length} photos</span>
+  </div>
+
+  <div class="detail-head">
+    <h1>${esc(b.name)}</h1>
+    <div class="kind">${esc(b.kind)} · <span class="num">${b.dist} mi</span> · ${b.walk} min walk</div>
+    <div class="ratingline">
+      ${b.count
+        ? `<span class="big num">${b.rating.toFixed(1)}</span>${starsHTML(b.rating,16)}
+           <span style="font-size:12.5px;color:var(--ink-2)" class="num">${b.count} reviews</span>`
+        : `<span class="pill ghost">${I.sparkle} No ratings yet — you added this one</span>`}
+    </div>
+  </div>
+
+  <div class="statuscard">
+    <div class="top">
+      ${pillHTML(b)}
+      <span style="font-size:11.5px;color:var(--ink-3)" class="num">Updated ${b.updated}</span>
+    </div>
+    ${b.code ? `<div class="codebox">${I.keypad} ${b.code}</div>` : ''}
+    <p class="note">${b.accessNote}</p>
+    <p class="note" style="font-size:12px;color:var(--ink-3)">${I.clock} <span class="num">${b.hours}</span> · confirmed by <b class="num">${b.confirms + (confirmed?1:0)}</b> people today · last edit by ${b.updatedBy}</p>
+    <div class="confirmrow">
+      <span class="q">${b.access==='locked' ? 'Is it still locked?' : 'Is it still open right now?'}</span>
+      <button class="minibtn yes" data-confirm="yes">${I.check} Yes</button>
+      <button class="minibtn no" data-confirm="no">${I.x} No</button>
+    </div>
+  </div>
+
+  <div class="actionrow">
+    <button class="action" data-act="directions">${I.nav}<span>Directions</span></button>
+    <button class="action" data-act="review">${I.pen}<span>Review</span></button>
+    <button class="action" data-act="photo">${I.camera}<span>Add photo</span></button>
+    <button class="action" data-act="save" aria-pressed="${saved}">${I.star(saved)}<span>${saved?'Saved':'Save'}</span></button>
+  </div>
+
+  <div class="section">
+    <h2>What you get</h2>
+    <div class="amenities">
+      ${b.amen.map(x=>`<span class="amenity">${AMENITY_ICON[x]||I.check}${x}</span>`).join('')}
+      ${(b.missing||[]).map(x=>`<span class="amenity off">${I.x}${x}</span>`).join('')}
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Community ratings</h2>
+    <div class="card ${b.count?'scores':''}">${b.count ? scoreRows
+      : `<p style="margin:0;font-size:13px;line-height:1.55;color:var(--ink-2)">Nobody has rated this one yet. The first few ratings decide whether it shows up in other people&rsquo;s searches, so they count double.</p>`}</div>
+  </div>
+
+  <div class="section">
+    <h2>Photos<span class="more">See all ${allScenes.length}</span></h2>
+    <div class="photogrid">
+      ${allScenes.slice(0,5).map(([s,t])=>`<button data-photo="${b.id}|${s}|${t}|the community">${photoArt(s,t,200,200)}</button>`).join('')}
+      ${allScenes.length>5 ? `<button class="more-photos">+${allScenes.length-5}</button>` : ''}
+    </div>
+  </div>
+
+  <div class="section" style="padding-bottom:24px">
+    <h2>Reviews<span class="more" data-act="review">Write a review</span></h2>
+    <div class="card" style="padding:4px 14px 10px">
+      ${b.reviews.length ? b.reviews.map((r,i)=>reviewHTML(b,r,i)).join('')
+        : `<div class="empty" style="padding:26px 10px"><h3>No reviews yet</h3><p>Be the first to say what it is like in there.</p><button class="minibtn" data-act="review" style="margin-top:4px">${I.pen} Write the first review</button></div>`}
+    </div>
+    <p style="font-size:11.5px;color:var(--ink-3);line-height:1.55;margin:14px 2px 0">
+      Bathroom Finder is community maintained. Status, codes and hours come from people like you and can go stale — if something has changed, say so and everyone else benefits.
+    </p>
+  </div>`;
+
+  const body = el('detail-body');
+  body.scrollTop = prevScroll;
+  el('btn-back').addEventListener('click', back);
+
+  body.querySelectorAll('[data-act]').forEach(btn=>btn.addEventListener('click', ()=>{
+    const act = btn.dataset.act;
+    if(act==='save') toggleSave(b.id);
+    else if(act==='review') openReview(b);
+    else if(act==='photo') toast('Camera would open here — photos post after a quick check', I.camera);
+    else if(act==='directions') toast(`Walking directions: ${b.walk} min via ${b.addr.split(',')[0]}`, I.nav);
+    else if(act==='share') toast('Link copied — share this bathroom with anyone', I.share);
+  }));
+  body.querySelectorAll('[data-confirm]').forEach(btn=>btn.addEventListener('click', ()=>{
+    const yes = btn.dataset.confirm==='yes';
+    state.confirmed.add(b.id);
+    b.updated = 'just now'; b.updatedBy = ME.handle;
+    if(!yes && b.access!=='locked'){ b.access='locked'; b.accessNote='Reported locked just now. Another confirmation will move it to the closed list.'; toast('Reported as locked — thank you', I.flag); }
+    else toast(yes ? 'Confirmed, thanks — that helps the next person' : 'Thanks — we will ask the next person too', I.check);
+    renderDetail(b.id, true); renderMap(); renderLists();
+  }));
+  body.querySelectorAll('[data-helpful]').forEach(btn=>btn.addEventListener('click', ()=>{
+    const k = btn.dataset.helpful;
+    state.helpful.has(k) ? state.helpful.delete(k) : state.helpful.add(k);
+    renderDetail(b.id, true);
+  }));
+  body.querySelectorAll('[data-reply]').forEach(btn=>btn.addEventListener('click', ()=>openReplyBox(b, btn.dataset.reply)));
+  body.querySelectorAll('[data-photo]').forEach(btn=>btn.addEventListener('click', ()=>{
+    const [bid,s,t,who] = btn.dataset.photo.split('|');
+    openLightbox(byId(bid), s, t, who);
+  }));
+  body.querySelector('.more-photos')?.addEventListener('click', ()=>toast('Full photo grid — 41 community photos', I.camera));
+}
+
+/* ===================== review composer ===================== */
+let draftStars = 0, draftTags = new Set();
+function openReview(b){
+  draftStars = 0; draftTags = new Set();
+  const tags = ['Spotless','Actually unlocked','Bring your own paper','No wait','Hard to find','Gender neutral','Well lit','Needs restocking'];
+  openModal(`
+    <h2>Rate this bathroom</h2>
+    <p class="lede">${esc(b.name)}</p>
+    <div class="field"><span>Overall</span>
+      <div class="starpick" id="starpick">${[1,2,3,4,5].map(n=>`<button data-star="${n}" aria-label="${n} stars" style="color:var(--line)">${I.star(false)}</button>`).join('')}</div>
+    </div>
+    <div class="field"><span>Was it open?</span>
+      <div class="seg" id="segopen">
+        <button aria-pressed="true">Unlocked</button><button aria-pressed="false">Code / key</button><button aria-pressed="false">Locked</button>
+      </div>
+    </div>
+    <div class="field"><span>Tags <span class="hint">pick any that fit</span></span>
+      <div class="chiprow" id="tagpick" style="flex-wrap:wrap; overflow:visible">${tags.map(t=>`<button class="chip" data-tag="${t}" aria-pressed="false">${t}</button>`).join('')}</div>
+    </div>
+    <div class="field"><span>Your review</span>
+      <textarea class="input" id="revtext" placeholder="What should the next person know before they walk over?"></textarea>
+    </div>
+    <button class="btn secondary" style="margin-bottom:10px" id="addphoto">${I.camera} Add photos</button>
+    <button class="btn" id="postrev">Post review</button>
+  `);
+  const m = el('modal');
+  m.querySelectorAll('[data-star]').forEach(s=>s.addEventListener('click',()=>{
+    draftStars = +s.dataset.star;
+    m.querySelectorAll('[data-star]').forEach(x=>{
+      const on = +x.dataset.star <= draftStars;
+      x.style.color = on ? 'var(--star)' : 'var(--line)';
+      x.innerHTML = I.star(on);
+    });
+  }));
+  m.querySelectorAll('[data-tag]').forEach(t=>t.addEventListener('click',()=>{
+    const on = t.getAttribute('aria-pressed')==='true';
+    t.setAttribute('aria-pressed', String(!on));
+    on ? draftTags.delete(t.dataset.tag) : draftTags.add(t.dataset.tag);
+  }));
+  m.querySelectorAll('#segopen button').forEach((s,i,arr)=>s.addEventListener('click',()=>{
+    arr.forEach(x=>x.setAttribute('aria-pressed','false')); s.setAttribute('aria-pressed','true');
+  }));
+  el('addphoto').addEventListener('click',()=>toast('Camera roll would open here', I.camera));
+  el('postrev').addEventListener('click',()=>{
+    if(!draftStars){ toast('Pick a star rating first', I.star(false)); return; }
+    const txt = el('revtext').value.trim() || 'Quick stop, matched what everyone else said here.';
+    b.reviews.unshift({u:ME.name, lv:'Level '+ME.level, st:draftStars, when:'just now', helpful:0,
+      tags:[...draftTags], txt, color:ME.color});
+    b.count += 1;
+    b.rating = Math.round(((b.rating*(b.count-1) + draftStars)/b.count)*10)/10;
+    ME.stats.reviews += 1; ME.points += 60;
+    ME.activity.unshift({icon:I.pen, html:`Reviewed <b>${esc(b.name)}</b> — ${draftStars} star${draftStars===1?'':'s'}`, when:'now'});
+    closeModal(); renderDetail(b.id, true); renderLists(); renderMap(); renderProfile();
+    toast('Review posted · +60 points', I.sparkle);
+  });
+}
+function openReplyBox(b, who){
+  openModal(`
+    <h2>Reply to ${esc(who)}</h2>
+    <p class="lede">Replies are public and attached to their review.</p>
+    <div class="field"><textarea class="input" id="replytext" placeholder="Add context, or say whether it is still like that…"></textarea></div>
+    <button class="btn" id="postreply">Post reply</button>
+  `);
+  el('postreply').addEventListener('click',()=>{ closeModal(); toast('Reply posted', I.bubble); });
+}
+
+/* ===================== modal / lightbox ===================== */
+function openModal(html){
+  el('modal').innerHTML = `<div class="grab"></div>` + html;
+  el('modal').dataset.open = 'true';
+  el('veil').dataset.open = 'true';
+}
+function closeModal(){ el('modal').dataset.open='false'; el('veil').dataset.open='false'; }
+function openLightbox(b, scene, tone, who){
+  el('lightbox').innerHTML = `
+    <div class="lbtop">
+      <button class="circbtn" id="lbclose" aria-label="Close">${I.x}</button>
+      <span style="font-size:12.5px;font-weight:600">${esc(b.name)}</span>
+      <button class="circbtn" aria-label="Report photo">${I.flag}</button>
+    </div>
+    <div class="lbstage">${photoArt(scene, tone, 400, 400)}</div>
+    <div class="lbcap"><b>Posted by ${esc(who)}</b> · community photo. Photos are reviewed before they appear, and faces are never allowed.</div>`;
+  el('lightbox').dataset.open = 'true';
+  el('lbclose').addEventListener('click', ()=>el('lightbox').dataset.open='false');
+}
+
+/* ===================== add ===================== */
+const addDraft = {access:'open', amen:new Set(['No purchase needed'])};
+function renderAdd(){
+  const amens = ['No purchase needed','Wheelchair accessible','Baby changing table','Gender neutral','Single occupancy','Menstrual products','Open 24 hours'];
+  el('add-body').innerHTML = `
+    <div class="card" style="display:flex;gap:11px;align-items:center;margin-bottom:16px;background:var(--accent-soft);border-color:transparent">
+      <span style="color:var(--accent)">${I.people}</span>
+      <p style="margin:0;font-size:12.5px;line-height:1.5;color:var(--ink-2)"><b style="color:var(--ink)">2,140 bathrooms</b> in Midtown were added by people who were standing right there.</p>
+    </div>
+    <div class="field"><span>Where is it?</span>
+      <input class="input" placeholder="Business, park, station…" value="">
+      <span class="hint">We will pin it to your current spot — drag to adjust.</span>
+    </div>
+    <div class="field"><span>What kind of place?</span>
+      <div class="seg" id="addkind"><button aria-pressed="true">Public</button><button aria-pressed="false">Business</button><button aria-pressed="false">Park</button><button aria-pressed="false">Transit</button></div>
+    </div>
+    <div class="field"><span>How do you get in?</span>
+      <div class="seg" id="addaccess" style="grid-auto-flow:row;grid-template-columns:repeat(2,1fr)">
+        <button aria-pressed="true" data-a="open">Unlocked</button>
+        <button aria-pressed="false" data-a="code">Code required</button>
+        <button aria-pressed="false" data-a="ask">Key at counter</button>
+        <button aria-pressed="false" data-a="customer">Customers only</button>
+      </div>
+    </div>
+    <div class="field"><span>What is in there?</span>
+      <div class="toggle-list">
+        ${amens.map(a=>`<div class="toggle"><span>${a}</span><button class="switch" data-amen="${a}" aria-pressed="${addDraft.amen.has(a)}" aria-label="${a}"><i></i></button></div>`).join('')}
+      </div>
+    </div>
+    <div class="field"><span>Photos <span class="hint">optional, but they help a lot</span></span>
+      <button class="btn secondary" id="addphotos">${I.camera} Take or upload photos</button>
+    </div>
+    <div class="field"><span>Anything the next person should know?</span>
+      <textarea class="input" id="addnote" placeholder="e.g. down the corridor behind the fish counter, unmarked green door"></textarea>
+    </div>
+    <button class="btn" id="addsubmit">${I.plus} Add to the map</button>
+    <p style="font-size:11.5px;color:var(--ink-3);line-height:1.55;margin:14px 2px 30px;text-align:center">New listings go live after two other people confirm them.</p>`;
+
+  el('add-body').querySelectorAll('.seg').forEach(seg=>{
+    seg.querySelectorAll('button').forEach(btn=>btn.addEventListener('click',()=>{
+      seg.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed','false'));
+      btn.setAttribute('aria-pressed','true');
+      if(btn.dataset.a) addDraft.access = btn.dataset.a;
+    }));
+  });
+  el('add-body').querySelectorAll('[data-amen]').forEach(sw=>sw.addEventListener('click',()=>{
+    const on = sw.getAttribute('aria-pressed')==='true';
+    sw.setAttribute('aria-pressed', String(!on));
+    on ? addDraft.amen.delete(sw.dataset.amen) : addDraft.amen.add(sw.dataset.amen);
+  }));
+  el('addphotos').addEventListener('click',()=>toast('Camera roll would open here', I.camera));
+  el('addsubmit').addEventListener('click',()=>{
+    const nameInput = el('add-body').querySelector('input');
+    const name = nameInput.value.trim();
+    if(!name){ nameInput.focus(); toast('Give it a name so people can find it', I.flag); return; }
+    const note = el('addnote').value.trim();
+    const id = 'u' + Date.now();
+    DATA.push({id, name, kind:'Added by you · Pending confirmation', addr:'Near Harborview & 5th',
+      x:186 + Math.round((Math.random()-.5)*54), y:352 + Math.round((Math.random()-.5)*54), dist:0.05, walk:1, rating:0, count:0, access:addDraft.access,
+      accessNote: note || 'You added this one. Two confirmations from other people and it goes live for everyone.',
+      hours:'Hours not set yet', updated:'just now', updatedBy:ME.handle, confirms:1,
+      scenes:[['door','mint']], scores:{clean:0,privacy:0,supplies:0,wait:0},
+      amen:[...addDraft.amen], missing:[], reviews:[]});
+    ME.points += 120;
+    ME.activity.unshift({icon:I.plus, html:`Added <b>${esc(name)}</b> to the map`, when:'now'});
+    nameInput.value=''; el('addnote').value='';
+    refreshAll(); go('map');
+    toast('Added to the map · +120 points', I.sparkle);
+  });
+}
+
+/* ===================== profile ===================== */
+function renderProfile(){
+  const pct = Math.min(100, Math.round(ME.points/ME.next*100));
+  ME.stats.saves = state.saved.size;
+  el('profile-body').innerHTML = `
+    <div class="profile-hero">
+      <div class="profile-top">
+        <div class="avatar" style="background:${ME.color}">${ME.initials}</div>
+        <div style="flex:1">
+          <h1>${ME.name}</h1>
+          <div class="handle">${ME.handle} · Midtown</div>
+          <div style="margin-top:7px"><span class="rlevel">Level ${ME.level} · ${ME.levelName}</span></div>
+        </div>
+        <button class="minibtn">Edit</button>
+      </div>
+      <div class="levelbar">
+        <div class="capt"><span class="num">${ME.points} pts</span><span class="num">${ME.next - ME.points} to Level ${ME.level+1}</span></div>
+        <div class="bar"><i style="width:${pct}%"></i></div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><b class="num">${ME.stats.reviews}</b><span>Reviews</span></div>
+      <div class="stat"><b class="num">${ME.stats.photos}</b><span>Photos</span></div>
+      <div class="stat"><b class="num">${ME.stats.saves}</b><span>Saved</span></div>
+    </div>
+    <div class="section">
+      <h2>Badges</h2>
+      <div class="badges">
+        ${ME.badges.map(b=>`<div class="badge ${b.locked?'locked-badge':''}"><span class="bicon">${b.icon}</span><span><b>${b.name}</b><span>${b.sub}</span></span></div>`).join('')}
+      </div>
+    </div>
+    <div class="section">
+      <h2>Your activity</h2>
+      <div class="card activity">
+        ${ME.activity.slice(0,6).map(a=>`<div class="act"><span class="aicon">${a.icon}</span><p>${a.html}</p><time>${a.when}</time></div>`).join('')}
+      </div>
+    </div>
+    <div class="section" style="padding-bottom:26px">
+      <h2>Settings</h2>
+      <div class="card toggle-list">
+        <div class="toggle"><span>Alert me when a saved bathroom closes</span><button class="switch" aria-pressed="true"><i></i></button></div>
+        <div class="toggle"><span>Show my reviews under my name</span><button class="switch" aria-pressed="true"><i></i></button></div>
+        <div class="toggle"><span>Only show step-free bathrooms</span><button class="switch" aria-pressed="false"><i></i></button></div>
+      </div>
+    </div>`;
+  el('profile-body').querySelectorAll('.switch').forEach(sw=>sw.addEventListener('click',()=>{
+    sw.setAttribute('aria-pressed', String(sw.getAttribute('aria-pressed')!=='true'));
+  }));
+}
+
+/* ===================== navigation ===================== */
+function go(screen){
+  if(screen !== 'detail') state.prev = screen;
+  state.screen = screen;
+  document.querySelectorAll('.screen').forEach(s=>s.dataset.active = String(s.id === 'screen-'+screen));
+  document.querySelectorAll('.tab').forEach(t=>{
+    if(t.dataset.go === screen) t.setAttribute('aria-current','page'); else t.removeAttribute('aria-current');
+  });
+  if(screen==='profile') renderProfile();
+}
+function openDetail(id){
+  state.detail = id; state.sel = id;
+  renderDetail(id);
+  state.screen = 'detail';
+  document.querySelectorAll('.screen').forEach(s=>s.dataset.active = String(s.id === 'screen-detail'));
+  renderMap();
+}
+function back(){ go(state.prev); }
+
+function refreshAll(){ renderMap(); renderLists(); if(state.detail && state.screen==='detail') renderDetail(state.detail); renderProfile(); }
+
+/* ===================== sheet drag ===================== */
+(function sheetDrag(){
+  const sheet = el('sheet'), grab = el('grab');
+  const PEEK = 232;
+  let dragging = false, startY = 0, startT = 0, moved = 0;
+  const maxT = () => sheet.offsetHeight - PEEK;
+  const curT = () => sheet.dataset.state === 'full' ? 0 : maxT();
+
+  const down = e=>{
+    dragging = true; moved = 0; startY = e.clientY; startT = curT();
+    sheet.classList.add('dragging'); grab.setPointerCapture?.(e.pointerId);
+  };
+  const move = e=>{
+    if(!dragging) return;
+    const d = e.clientY - startY; moved = Math.abs(d);
+    sheet.style.transform = `translateY(${Math.min(Math.max(startT + d, 0), maxT())}px)`;
+  };
+  const up = ()=>{
+    if(!dragging) return;
+    dragging = false; sheet.classList.remove('dragging');
+    const t = parseFloat((sheet.style.transform.match(/-?[\d.]+/) || [curT()])[0]);
+    sheet.style.transform = '';
+    if(moved < 6) sheet.dataset.state = sheet.dataset.state === 'full' ? 'peek' : 'full';
+    else sheet.dataset.state = t < maxT() * 0.45 ? 'full' : 'peek';
+  };
+  grab.addEventListener('pointerdown', down);
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', up);
+  grab.addEventListener('keydown', e=>{
+    if(e.key==='Enter'||e.key===' '){ e.preventDefault(); sheet.dataset.state = sheet.dataset.state==='full'?'peek':'full'; }
+  });
+})();
+
+/* ===================== wiring ===================== */
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click', ()=>go(t.dataset.go)));
+el('q').addEventListener('input', e=>{ state.q = e.target.value; renderMap(); renderLists(); });
+el('btn-sort').addEventListener('click', ()=>{
+  const order = ['dist','rating','clean'];
+  state.sort = order[(order.indexOf(state.sort)+1) % order.length];
+  el('sort-label').textContent = {dist:'Closest', rating:'Top rated', clean:'Cleanest'}[state.sort];
+  renderLists(); el('sheet').dataset.state = 'full';
+});
+el('btn-locate').addEventListener('click', ()=>toast('Centred on Harborview & 5th', I.nav));
+el('btn-layers').addEventListener('click', ()=>toast('Layers: cleanliness heatmap, 24-hour only, step-free', I.sparkle));
+el('veil').addEventListener('click', closeModal);
+document.addEventListener('keydown', e=>{
+  if(e.key === 'Escape'){
+    if(el('lightbox').dataset.open === 'true') el('lightbox').dataset.open = 'false';
+    else if(el('modal').dataset.open === 'true') closeModal();
+    else if(state.screen === 'detail') back();
+  }
+});
+
+renderChips(); renderMap(); renderLists(); renderAdd(); renderProfile(); go('map');
+</script>

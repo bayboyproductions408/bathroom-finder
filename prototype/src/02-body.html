@@ -1,0 +1,137 @@
+<div class="stage">
+  <div class="stage-head">
+    <div class="wordmark">
+      <span class="glyph" aria-hidden="true">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-5.7 7-11a7 7 0 1 0-14 0c0 5.3 7 11 7 11Z"/><circle cx="12" cy="10" r="2.4"/></svg>
+      </span>
+      Bathroom Finder
+    </div>
+    <p>Find a restroom you can actually use — is it unlocked, is it clean, and what did the last person who went in have to say about it.</p>
+    <span class="demo-tag">Interactive prototype · sample data</span>
+  </div>
+
+  <div class="phone">
+    <div class="viewport">
+      <div class="island" aria-hidden="true"></div>
+
+      <div class="statusbar" aria-hidden="true">
+        <span class="num">9:41</span>
+        <span class="sigs">
+          <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.6" y="5" width="3" height="6" rx="1"/><rect x="9.2" y="2.6" width="3" height="8.4" rx="1"/><rect x="13.8" y="0" width="3" height="11" rx="1"/></svg>
+          <svg width="15" height="11" viewBox="0 0 15 11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M1 3.6a9.4 9.4 0 0 1 13 0"/><path d="M3.6 6.3a5.7 5.7 0 0 1 7.8 0"/><circle cx="7.5" cy="9.3" r="1.1" fill="currentColor" stroke="none"/></svg>
+          <svg width="24" height="11" viewBox="0 0 24 11" fill="none"><rect x="0.6" y="0.6" width="19" height="9.8" rx="3" stroke="currentColor" stroke-opacity=".45"/><rect x="2.2" y="2.2" width="14.6" height="6.6" rx="1.8" fill="currentColor"/><path d="M21.4 3.8v3.4a2.2 2.2 0 0 0 0-3.4Z" fill="currentColor" fill-opacity=".5"/></svg>
+        </span>
+      </div>
+
+      <div class="screens">
+        <!-- ============ MAP ============ -->
+        <section class="screen" id="screen-map" data-active="true" aria-label="Map">
+          <div class="topbar">
+            <div class="locrow">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-5.7 7-11a7 7 0 1 0-14 0c0 5.3 7 11 7 11Z"/><circle cx="12" cy="10" r="2.4"/></svg>
+              Near <b>Harborview &amp; 5th</b>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
+            <label class="search">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.4-3.4"/></svg>
+              <input id="q" type="search" placeholder="Search bathrooms, places, streets" autocomplete="off">
+            </label>
+            <div class="chiprow" id="chips"></div>
+          </div>
+          <div class="mapwrap">
+            <div id="map"></div>
+            <div class="maptools" style="top:14px">
+              <button class="mapbtn" id="btn-locate" aria-label="Recenter on my location">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.4"/><path d="M12 2v3M12 19v3M22 12h-3M5 12H2"/><circle cx="12" cy="12" r="8.4"/></svg>
+              </button>
+              <button class="mapbtn" id="btn-layers" aria-label="Map layers">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 14 9 5 9-5"/></svg>
+              </button>
+            </div>
+            <div class="sheet" id="sheet" data-state="peek">
+              <div class="sheet-grab" id="grab" role="button" tabindex="0" aria-label="Expand list of bathrooms"><i></i></div>
+              <div class="sheet-head">
+                <h2 id="sheet-count">12 bathrooms nearby</h2>
+                <button class="sortbtn" id="btn-sort">
+                  <span id="sort-label">Closest</span>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/></svg>
+                </button>
+              </div>
+              <div class="sheet-list" id="sheet-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ NEARBY LIST ============ -->
+        <section class="screen" id="screen-list" aria-label="Nearby">
+          <div class="topbar">
+            <h1 class="screen-title">Nearby</h1>
+            <div class="chiprow" id="chips2"></div>
+          </div>
+          <div class="scroll" style="padding:6px 12px 18px" id="list-body"></div>
+        </section>
+
+        <!-- ============ ADD ============ -->
+        <section class="screen" id="screen-add" aria-label="Add a bathroom">
+          <div class="topbar">
+            <h1 class="screen-title">Add a bathroom</h1>
+            <p class="screen-sub">You&rsquo;re the reason the next person finds it. Takes about a minute.</p>
+          </div>
+          <div class="scroll" style="padding:16px" id="add-body"></div>
+        </section>
+
+        <!-- ============ SAVED ============ -->
+        <section class="screen" id="screen-saved" aria-label="Saved">
+          <div class="topbar">
+            <h1 class="screen-title">Saved</h1>
+            <p class="screen-sub" id="saved-sub">Your go-to list, always one tap away.</p>
+          </div>
+          <div class="scroll" style="padding:6px 12px 18px" id="saved-body"></div>
+        </section>
+
+        <!-- ============ PROFILE ============ -->
+        <section class="screen" id="screen-profile" aria-label="Profile">
+          <div class="scroll" id="profile-body"></div>
+        </section>
+
+        <!-- ============ DETAIL ============ -->
+        <section class="screen push" id="screen-detail" aria-label="Bathroom details">
+          <div class="scroll" id="detail-body"></div>
+        </section>
+      </div>
+
+      <nav class="tabbar" id="tabbar" aria-label="Main">
+        <button class="tab" data-go="map" aria-current="page">
+          <span class="tabicon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 3 5.4v15L9 18l6 3 6-2.4v-15L15 6 9 3Z"/><path d="M9 3v15M15 6v15"/></svg></span>
+          Map
+        </button>
+        <button class="tab" data-go="list">
+          <span class="tabicon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg></span>
+          Nearby
+        </button>
+        <button class="tab add" data-go="add">
+          <span class="tabicon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+          Add
+        </button>
+        <button class="tab" data-go="saved">
+          <span class="tabicon">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.6 2.6 5.3 5.9.85-4.25 4.15 1 5.85L12 17l-5.25 2.75 1-5.85L3.5 9.75l5.9-.85L12 3.6Z"/></svg>
+            <span class="savedot num" id="savecount">2</span>
+          </span>
+          Saved
+        </button>
+        <button class="tab" data-go="profile">
+          <span class="tabicon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg></span>
+          Profile
+        </button>
+      </nav>
+
+      <div class="toasts" id="toasts" aria-live="polite"></div>
+      <div class="veil" id="veil"></div>
+      <div class="modal" id="modal" role="dialog" aria-modal="true"></div>
+      <div class="lightbox" id="lightbox" role="dialog" aria-modal="true"></div>
+    </div>
+  </div>
+
+  <p class="stage-foot">Tap a pin, drag the sheet up, open a bathroom, leave a review, save a favorite. <kbd>All data is invented for the demo</kbd> — the venues, reviews and door codes are fictional.</p>
+</div>

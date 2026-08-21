@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bathroom Finder — safety &amp; payment tests</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  body{padding:24px; max-width:820px; margin:0 auto}
+  h1{font-size:24px; margin-bottom:6px}
+  .lede{color:var(--ink-2); font-size:14px; line-height:1.6; margin:0 0 22px}
+  h2{font-size:16px; margin:26px 0 10px}
+  table{width:100%; border-collapse:collapse; font-size:13px}
+  td,th{text-align:left; padding:8px 10px; border-bottom:1px solid var(--line-soft); vertical-align:top}
+  th{font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3)}
+  .ok{color:var(--open); font-weight:700}
+  .bad{color:var(--locked); font-weight:700}
+  .summary{padding:14px; border-radius:14px; font-weight:700; margin-bottom:18px}
+  .summary.pass{background:var(--open-soft); color:var(--open)}
+  .summary.fail{background:var(--locked-soft); color:var(--locked)}
+  code{font-size:12px; color:var(--ink-2)}
+</style>
+</head>
+<body>
+<h1>Safety &amp; payment tests</h1>
+<p class="lede">Runs the moderation policy and the payment lifecycle against known inputs.
+Open this page while <code>node serve.js</code> is running. The explicit-content cases are score
+vectors, not images — the policy is tested directly, so no such image has to exist.</p>
+<div id="summary" class="summary">Running…</div>
+<div id="out"></div>
+
+<script src="moderation.js"></script>
+<script src="rentals.js"></script>
+<script>
+const results = [];
+const t = (group, name, pass, detail) => results.push({group, name, pass, detail});
+
+/* ---------- 1. moderation policy ---------- */
+const CASES = [
+  ['benign bathroom, noisy scores',  {neutral:.79,drawing:.18,porn:.019,hentai:.017,sexy:.003},  0, 'approved'],
+  ['clean neutral photo',            {neutral:.95,drawing:.03,porn:.005,hentai:.005,sexy:.01},   0, 'approved'],
+  ['explicit',                       {neutral:.10,drawing:.02,porn:.80, hentai:.05, sexy:.03},   0, 'rejected'],
+  ['borderline explicit',            {neutral:.40,drawing:.10,porn:.09, hentai:.05, sexy:.36},   0, 'rejected'],
+  ['moderate explicit signal',       {neutral:.55,drawing:.20,porn:.05, hentai:.02, sexy:.18},   0, 'pending'],
+  ['suggestive',                     {neutral:.60,drawing:.10,porn:.01, hentai:.01, sexy:.28},   0, 'pending'],
+  ['ambiguous, weak benign signal',  {neutral:.30,drawing:.20,porn:.03, hentai:.01, sexy:.05},   0, 'pending'],
+  ['person in shot',                 {neutral:.90,drawing:.06,porn:.01, hentai:.01, sexy:.02},   1, 'pending'],
+  ['face check unavailable',         {neutral:.90,drawing:.06,porn:.01, hentai:.01, sexy:.02},  -1, 'pending']
+];
+for (const [name, scores, faces, want] of CASES){
+  const got = Moderation.decide(scores, faces);
+  t('Moderation policy', name, got.verdict === want, `wanted ${want}, got ${got.verdict} — ${got.reasons[0]}`);
+}
+
+/* ---------- 2. text screening ---------- */
+const TEXTS = [
+  ['ordinary review',       'Clean, well lit, and there was no wait at all.',       true],
+  ['phone number',          'Call me on 555 867 5309 for the key',                  false],
+  ['email address',         'email sam@example.com to get in',                      false],
+  ['link',                  'see https://spam.example.com for more',                false],
+  ['street address',        'It is at 42 Wallaby Street round the back',            false],
+  ['shouting',              'ABSOLUTELY THE WORST BATHROOM I HAVE EVER SEEN ANYWHERE OK', false]
+];
+for (const [name, text, wantOk] of TEXTS){
+  const got = Moderation.screenText(text);
+  t('Review text', name, got.ok === wantOk, wantOk ? 'should pass' : `should be blocked — ${got.reasons[0] || 'not blocked!'}`);
+}
+
+/* ---------- 3. images: quality gates + fail-closed ---------- */
+const draw = (fn, w=600, h=600) => new Promise(res => {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  fn(cv.getContext('2d'), w, h);
+  cv.toBlob(b => res(new File([b], 'test.jpg', {type:'image/jpeg'})), 'image/jpeg', .9);
+});
+(async () => {
+  const blank = await draw((c,w,h)=>{ c.fillStyle='#c9cfcd'; c.fillRect(0,0,w,h); });
+  const black = await draw((c,w,h)=>{ c.fillStyle='#050505'; c.fillRect(0,0,w,h); });
+  const tiny  = await draw((c,w,h)=>{ c.fillStyle='#3a7'; c.fillRect(0,0,w,h); c.fillStyle='#fff'; c.fillRect(2,2,20,20); }, 60, 60);
+  const room  = await draw((c,w,h)=>{
+    c.fillStyle='#e3e9e7'; c.fillRect(0,0,w,h);
+    for (let y=0;y<h;y+=45){ c.strokeStyle='#ccd6d3'; c.beginPath(); c.moveTo(0,y); c.lineTo(w,y); c.stroke(); }
+    c.fillStyle='#fff'; c.fillRect(100,320,400,170);
+    c.fillStyle='#8fa09b'; c.fillRect(220,140,160,90);
+  });
+
+  for (const [name, file, want] of [['blank image', blank, 'rejected'],
+                                    ['near-black image', black, 'rejected'],
+                                    ['too small', tiny, 'rejected']]){
+    const r = await Moderation.screenPhoto(file, ()=>{});
+    t('Image gates', name, r.verdict === want, `wanted ${want}, got ${r.verdict} — ${r.reasons[0]}`);
+  }
+
+  /* the important one: if the models cannot load, nothing may be published */
+  const real = Moderation.ensureModels;
+  Moderation.ensureModels = async () => false;
+  const failed = await Moderation.screenPhoto(room, ()=>{});
+  Moderation.ensureModels = real;
+  t('Image gates', 'fails closed when the checker cannot load',
+    failed.verdict === 'pending',
+    `wanted pending, got ${failed.verdict} — ${failed.reasons[0]}`);
+
+  /* a normal room photo, with the real models, should get through */
+  const okRoom = await Moderation.screenPhoto(room, ()=>{});
+  t('Image gates', 'ordinary bathroom photo is not held needlessly',
+    okRoom.verdict === 'approved',
+    `got ${okRoom.verdict} — ${okRoom.reasons[0]}`);
+
+  /* ---------- 4. payment lifecycle ---------- */
+  try {
+    const cfg = await Rentals.Pay.config();
+    t('Payments', 'server reachable', !!cfg.provider, `provider: ${cfg.provider}`);
+
+    const hold = await Rentals.Pay.authorize({bookingId:'test_' + Date.now(), amount:4, currency:'usd'});
+    t('Payments', 'authorize creates a hold, not a charge', hold.status === 'authorized', `status ${hold.status}`);
+    t('Payments', 'fee and payout split correctly',
+      Math.abs(hold.fee - 0.6) < 0.001 && Math.abs(hold.payout - 3.4) < 0.001,
+      `fee ${hold.fee}, payout ${hold.payout} on $4`);
+
+    const cap = await Rentals.Pay.capture(hold.id);
+    t('Payments', 'capture takes the money and issues a receipt',
+      cap.status === 'captured' && !!cap.receipt, `status ${cap.status}, receipt ${cap.receipt}`);
+
+    let refused = false;
+    try { await Rentals.Pay.void(hold.id); } catch(e){ refused = true; }
+    t('Payments', 'a captured payment cannot be voided', refused, refused ? 'correctly refused' : 'IT LET ME VOID A CAPTURE');
+
+    const hold2 = await Rentals.Pay.authorize({bookingId:'test2_' + Date.now(), amount:2, currency:'usd'});
+    const voided = await Rentals.Pay.void(hold2.id);
+    t('Payments', 'cancelling releases the hold', voided.status === 'voided', `status ${voided.status}`);
+  } catch(err){
+    t('Payments', 'payment API', false, 'server not reachable: ' + err.message);
+  }
+
+  render();
+})();
+
+function render(){
+  const groups = [...new Set(results.map(r => r.group))];
+  const passed = results.filter(r => r.pass).length;
+  const sum = document.getElementById('summary');
+  sum.className = 'summary ' + (passed === results.length ? 'pass' : 'fail');
+  sum.textContent = `${passed} of ${results.length} checks passed`;
+  document.getElementById('out').innerHTML = groups.map(g => `
+    <h2>${g}</h2>
+    <table><tr><th style="width:34px"></th><th>Check</th><th>Detail</th></tr>
+    ${results.filter(r => r.group === g).map(r => `<tr>
+      <td class="${r.pass?'ok':'bad'}">${r.pass?'PASS':'FAIL'}</td>
+      <td>${r.name}</td><td><code>${r.detail}</code></td></tr>`).join('')}
+    </table>`).join('');
+}
+</script>
+</body>
+</html>

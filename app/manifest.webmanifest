@@ -1,0 +1,21 @@
+{
+  "name": "Bathroom Finder",
+  "short_name": "Bathroom",
+  "description": "Find a bathroom you can actually use — is it open, is it clean, and what did the last person say.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#E8EEEF",
+  "theme_color": "#0F7B72",
+  "categories": ["travel", "navigation", "lifestyle"],
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ],
+  "shortcuts": [
+    {"name": "Bathrooms near me", "short_name": "Near me", "url": "./?go=locate"},
+    {"name": "Add a bathroom", "short_name": "Add", "url": "./?go=add"}
+  ]
+}

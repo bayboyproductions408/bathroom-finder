@@ -1,0 +1,15 @@
+# One-click config for Render's free tier.
+#   New → Blueprint → point at this repo. No card required.
+services:
+  - type: web
+    name: bathroom-finder
+    runtime: node
+    plan: free
+    buildCommand: "echo no build step"
+    startCommand: "node serve.js"
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: ADMIN_TOKEN
+        generateValue: true      # Render invents a strong one; read it in the dashboard
+      - key: NODE_VERSION
+        value: "22"

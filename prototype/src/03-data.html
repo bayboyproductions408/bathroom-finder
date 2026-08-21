@@ -1,0 +1,331 @@
+<script>
+/* =====================================================================
+   Bathroom Finder — prototype
+   All venues, reviews, codes and people below are invented for the demo.
+   ===================================================================== */
+
+/* ---------- icon set ---------- */
+const I = {
+  star:(f)=>`<svg viewBox="0 0 24 24" fill="${f?'currentColor':'none'}" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="m12 3.8 2.5 5.1 5.6.8-4.05 3.95.96 5.6L12 16.6l-5.01 2.65.96-5.6L3.9 9.7l5.6-.8L12 3.8Z"/></svg>`,
+  check:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12.5 5.2 5.2L20 6.5"/></svg>`,
+  x:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>`,
+  back:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 8 12l7 7"/></svg>`,
+  share:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M12 3 8 7M12 3l4 4"/><path d="M6 12H4.5v8h15v-8H18"/></svg>`,
+  nav:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-8-8 18-2.2-7.8L3 11Z"/></svg>`,
+  camera:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.6-2.4h6.8L17 8h3v12H4V8Z"/><circle cx="12" cy="13.4" r="3.6"/></svg>`,
+  pen:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L20 8l-4-4L4 16v4Z"/><path d="m14.5 5.5 4 4"/></svg>`,
+  flag:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4M5 4h12l-2.2 3.5L17 11H5"/></svg>`,
+  clock:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>`,
+  up:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11.5 12 6l5 5.5"/><path d="M12 6v12"/></svg>`,
+  bubble:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 15a3 3 0 0 1-3 3H9l-4.5 3.2V7a3 3 0 0 1 3-3h9.5a3 3 0 0 1 3 3v8Z"/></svg>`,
+  people:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 19a6 6 0 0 1 12 0"/><path d="M16 5.4a3.2 3.2 0 0 1 0 5.2M17.6 19a6 6 0 0 0-2-4.5"/></svg>`,
+  medal:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="14.5" r="5.5"/><path d="m8.5 9.4 -2.4-6h11.8l-2.4 6"/></svg>`,
+  sparkle:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 13.9 9l5.6 2-5.6 2-1.9 5.5L10.1 13 4.5 11l5.6-2L12 3.5Z"/></svg>`,
+  key:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="4"/><path d="m11 11 8 8M16.5 16.5 19 14"/></svg>`,
+  lock:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="9.5" rx="2.4"/><path d="M8 10.5V7.6a4 4 0 0 1 8 0v2.9"/></svg>`,
+  unlock:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="9.5" rx="2.4"/><path d="M8 10.5V7.6a4 4 0 0 1 7.4-2.1"/></svg>`,
+  keypad:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="7.5" cy="7" r="1.3"/><circle cx="12" cy="7" r="1.3"/><circle cx="16.5" cy="7" r="1.3"/><circle cx="7.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="16.5" cy="12" r="1.3"/><circle cx="12" cy="17" r="1.3"/></svg>`,
+  wheelchair:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="3.8" r="1.8"/><path d="M11 7v6h5l2.5 6"/><path d="M15.6 14.4A5.6 5.6 0 1 1 8 10.2"/></svg>`,
+  baby:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7.5" r="3.8"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/><path d="M10.4 7h.01M13.6 7h.01"/></svg>`,
+  gender:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="4.6"/><path d="M12 8.4V2.6M9.4 4.6h5.2"/></svg>`,
+  free:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M9.5 9h5M9.5 12h5M11.5 15V9"/></svg>`,
+  soap:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="10" width="13" height="10" rx="2.4"/><path d="M9.5 10V7.5h5V10M12 3.5v2"/></svg>`,
+  single:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3.5" width="14" height="17" rx="2"/><circle cx="15.4" cy="12" r="1.1" fill="currentColor"/></svg>`,
+  moon:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.4A8.5 8.5 0 0 1 9.6 4 8.5 8.5 0 1 0 20 14.4Z"/></svg>`,
+  plus:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`
+};
+const AMENITY_ICON = {
+  'Wheelchair accessible':I.wheelchair, 'Baby changing table':I.baby, 'Gender neutral':I.gender,
+  'No purchase needed':I.free, 'Free to use':I.free, 'Soap &amp; paper towels':I.soap,
+  'Single occupancy':I.single, 'Open 24 hours':I.moon, 'Menstrual products':I.sparkle,
+  'Attendant on duty':I.people
+};
+
+/* ---------- stylised "photos" ---------- */
+const TONES = {
+  cream:{wall:'#E7DFD2',wall2:'#D8CDBB',fix:'#FBFAF7',line:'#B9AC96',floor:'#C3B7A3',accent:'#8C7B60'},
+  mint:{wall:'#D6E5DE',wall2:'#BFD5CC',fix:'#FCFEFD',line:'#9DB8AE',floor:'#AFC6BC',accent:'#5E8375'},
+  slate:{wall:'#D5DCE0',wall2:'#BEC8CE',fix:'#FAFCFD',line:'#98A6AE',floor:'#AAB6BC',accent:'#5C6E78'},
+  sand:{wall:'#EADFCB',wall2:'#DCCDB2',fix:'#FDFBF6',line:'#BCA98A',floor:'#C9B896',accent:'#93764A'},
+  blue:{wall:'#D2DFEC',wall2:'#B9CBDD',fix:'#FBFDFF',line:'#93A9BF',floor:'#A6BACC',accent:'#4E6E8C'},
+  grime:{wall:'#CFCBC0',wall2:'#B6B1A4',fix:'#E8E5DC',line:'#8E887A',floor:'#A09A8C',accent:'#6B6558'}
+};
+function tileWall(t,w,h,cell){
+  let s=`<rect width="${w}" height="${h}" fill="${t.wall}"/>`;
+  for(let y=0;y<h;y+=cell) s+=`<line x1="0" y1="${y}" x2="${w}" y2="${y}" stroke="${t.wall2}" stroke-width="1"/>`;
+  for(let x=0;x<w;x+=cell) s+=`<line x1="${x}" y1="0" x2="${x}" y2="${h}" stroke="${t.wall2}" stroke-width="1"/>`;
+  return s;
+}
+/* five scenes, drawn flat so they read at thumbnail size */
+function photoArt(scene, toneName, w=300, h=300){
+  const t = TONES[toneName] || TONES.slate;
+  const g = {
+    sink:`${tileWall(t,w,h,26)}
+      <rect x="0" y="${h*.72}" width="${w}" height="${h*.28}" fill="${t.floor}"/>
+      <rect x="${w*.16}" y="${h*.14}" width="${w*.68}" height="${h*.26}" rx="6" fill="${t.fix}" opacity=".85"/>
+      <rect x="${w*.16}" y="${h*.14}" width="${w*.68}" height="${h*.26}" rx="6" fill="none" stroke="${t.line}" stroke-width="2.5"/>
+      <path d="M${w*.16} ${h*.30} L${w*.5} ${h*.14} L${w*.84} ${h*.30} Z" fill="#fff" opacity=".35"/>
+      <rect x="${w*.10}" y="${h*.52}" width="${w*.80}" height="${h*.07}" rx="4" fill="${t.fix}"/>
+      <ellipse cx="${w*.5}" cy="${h*.545}" rx="${w*.16}" ry="${h*.035}" fill="${t.wall2}"/>
+      <path d="M${w*.5} ${h*.47} v-${h*.06} q0-${h*.03} ${w*.05}-${h*.03}" stroke="${t.accent}" stroke-width="5" fill="none" stroke-linecap="round"/>
+      <rect x="${w*.72}" y="${h*.42}" width="${w*.08}" height="${h*.09}" rx="3" fill="${t.accent}" opacity=".75"/>
+      <rect x="${w*.10}" y="${h*.59}" width="${w*.80}" height="${h*.03}" fill="${t.line}" opacity=".5"/>`,
+    stalls:`${tileWall(t,w,h,30)}
+      <rect x="0" y="${h*.78}" width="${w}" height="${h*.22}" fill="${t.floor}"/>
+      <rect x="${w*.04}" y="${h*.16}" width="${w*.28}" height="${h*.66}" rx="3" fill="${t.fix}"/>
+      <rect x="${w*.36}" y="${h*.16}" width="${w*.28}" height="${h*.66}" rx="3" fill="${t.fix}"/>
+      <rect x="${w*.68}" y="${h*.16}" width="${w*.28}" height="${h*.66}" rx="3" fill="${t.fix}" opacity=".9"/>
+      <rect x="${w*.04}" y="${h*.16}" width="${w*.28}" height="${h*.66}" rx="3" fill="none" stroke="${t.line}" stroke-width="2"/>
+      <rect x="${w*.36}" y="${h*.16}" width="${w*.28}" height="${h*.66}" rx="3" fill="none" stroke="${t.line}" stroke-width="2"/>
+      <rect x="${w*.68}" y="${h*.16}" width="${w*.28}" height="${h*.66}" rx="3" fill="none" stroke="${t.line}" stroke-width="2"/>
+      <circle cx="${w*.28}" cy="${h*.50}" r="4" fill="${t.accent}"/>
+      <circle cx="${w*.60}" cy="${h*.50}" r="4" fill="${t.accent}"/>
+      <circle cx="${w*.92}" cy="${h*.50}" r="4" fill="${t.accent}"/>
+      <rect x="${w*.50}" y="${h*.34}" width="${w*.10}" height="${h*.04}" rx="2" fill="#2E7D4F"/>
+      <rect x="${w*.18}" y="${h*.34}" width="${w*.10}" height="${h*.04}" rx="2" fill="#B23A2E"/>
+      <rect x="0" y="${h*.76}" width="${w}" height="3" fill="${t.line}" opacity=".6"/>`,
+    door:`<rect width="${w}" height="${h}" fill="${t.wall2}"/>
+      ${tileWall(t,w,h*.34,24)}
+      <rect x="${w*.18}" y="${h*.14}" width="${w*.64}" height="${h*.82}" rx="5" fill="${t.fix}"/>
+      <rect x="${w*.18}" y="${h*.14}" width="${w*.64}" height="${h*.82}" rx="5" fill="none" stroke="${t.line}" stroke-width="3"/>
+      <rect x="${w*.24}" y="${h*.22}" width="${w*.52}" height="${h*.30}" rx="3" fill="none" stroke="${t.line}" stroke-width="2" opacity=".7"/>
+      <rect x="${w*.40}" y="${h*.03}" width="${w*.20}" height="${h*.09}" rx="3" fill="${t.accent}"/>
+      <circle cx="${w*.46}" cy="${h*.075}" r="${h*.022}" fill="#fff"/><circle cx="${w*.54}" cy="${h*.075}" r="${h*.022}" fill="#fff"/>
+      <circle cx="${w*.735}" cy="${h*.56}" r="${w*.035}" fill="${t.accent}"/>
+      <rect x="${w*.70}" y="${h*.62}" width="${w*.10}" height="${h*.13}" rx="3" fill="${t.accent}" opacity=".85"/>
+      <circle cx="${w*.735}" cy="${h*.665}" r="2" fill="#fff"/><circle cx="${w*.735}" cy="${h*.70}" r="2" fill="#fff"/>`,
+    single:`${tileWall(t,w,h,28)}
+      <rect x="0" y="${h*.70}" width="${w}" height="${h*.30}" fill="${t.floor}"/>
+      <rect x="${w*.60}" y="${h*.10}" width="${w*.30}" height="${h*.26}" rx="4" fill="#CFE3EE"/>
+      <rect x="${w*.60}" y="${h*.10}" width="${w*.30}" height="${h*.26}" rx="4" fill="none" stroke="${t.line}" stroke-width="2.5"/>
+      <path d="M${w*.60} ${h*.23} h${w*.30}M${w*.75} ${h*.10} v${h*.26}" stroke="${t.line}" stroke-width="2"/>
+      <rect x="${w*.18}" y="${h*.34}" width="${w*.20}" height="${h*.20}" rx="4" fill="${t.fix}"/>
+      <rect x="${w*.16}" y="${h*.53}" width="${w*.25}" height="${h*.24}" rx="7" fill="${t.fix}"/>
+      <ellipse cx="${w*.285}" cy="${h*.53}" rx="${w*.125}" ry="${h*.045}" fill="${t.fix}"/>
+      <ellipse cx="${w*.285}" cy="${h*.53}" rx="${w*.085}" ry="${h*.028}" fill="${t.wall2}"/>
+      <circle cx="${w*.50}" cy="${h*.40}" r="${w*.045}" fill="${t.fix}"/>
+      <rect x="${w*.478}" y="${h*.40}" width="${w*.045}" height="${h*.09}" fill="${t.fix}"/>
+      <rect x="0" y="${h*.68}" width="${w}" height="3" fill="${t.line}" opacity=".5"/>`,
+    sign:`<rect width="${w}" height="${h}" fill="${t.wall}"/>
+      <rect x="0" y="0" width="${w}" height="${h*.55}" fill="${t.wall2}" opacity=".55"/>
+      <rect x="${w*.20}" y="${h*.16}" width="${w*.60}" height="${h*.44}" rx="6" fill="${t.accent}"/>
+      <circle cx="${w*.40}" cy="${h*.29}" r="${w*.045}" fill="#fff"/>
+      <path d="M${w*.363} ${h*.35} h${w*.075} l${w*.012} ${h*.14} h-${w*.028} l-${w*.006}-${h*.075} -${w*.006} ${h*.075} h-${w*.028} Z" fill="#fff"/>
+      <circle cx="${w*.60}" cy="${h*.29}" r="${w*.045}" fill="#fff"/>
+      <path d="M${w*.60} ${h*.335} l${w*.052} ${h*.10} h-${w*.026} l-${w*.004} ${h*.055} h-${w*.044} l-${w*.004}-${h*.055} h-${w*.026} Z" fill="#fff"/>
+      <rect x="${w*.30}" y="${h*.64}" width="${w*.40}" height="${h*.05}" rx="3" fill="${t.line}" opacity=".65"/>
+      <rect x="0" y="${h*.80}" width="${w}" height="${h*.20}" fill="${t.floor}"/>`
+  };
+  return `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice" role="img">${g[scene]||g.sink}</svg>`;
+}
+
+/* ---------- access states ---------- */
+const ACCESS = {
+  open:   {cls:'open',   label:'Unlocked',       icon:I.unlock},
+  code:   {cls:'code',   label:'Code required',  icon:I.keypad},
+  ask:    {cls:'ask',    label:'Key at counter', icon:I.key},
+  customer:{cls:'ask',   label:'Customers only', icon:I.people},
+  locked: {cls:'locked', label:'Locked',         icon:I.lock}
+};
+const AV = ['#0F7B72','#B8770B','#3A6EA5','#8A4FA8','#B23A2E','#1B8A4B','#C2591F','#4A5FA8'];
+
+/* ---------- the data ---------- */
+const DATA = [
+  {id:'b1', name:'Harborview Park Restroom', kind:'City park · Public building', addr:'Harborview Park, 5th & Marine Way',
+   x:96, y:352, dist:0.1, walk:2, rating:3.8, count:214, access:'open', accessNote:'Front door has no lock — the city unlocks the block house at dawn and closes it at 10pm.',
+   hours:'6:00 AM – 10:00 PM', updated:'23 min ago', updatedBy:'@marcusk', confirms:6,
+   scenes:[['sink','mint'],['stalls','mint'],['sign','mint'],['single','mint']],
+   scores:{clean:3.4, privacy:4.2, supplies:3.0, wait:4.6},
+   amen:['Wheelchair accessible','No purchase needed','Free to use','Baby changing table'], missing:['Menstrual products'],
+   reviews:[
+     {u:'Marcus K.',lv:'Level 4',st:4,when:'23 min ago',helpful:18,scenes:[['sink','mint']],tags:['Actually unlocked','Soap refilled'],
+      txt:'Checked it on my morning run. Both doors open, soap dispensers were full for once, and the floor had clearly been mopped. This is the best I have seen it in a year — grab it while the streak lasts.'},
+     {u:'Priya N.',lv:'Level 2',st:3,when:'2 days ago',helpful:9,tags:['Bring your own paper'],
+      txt:'Fine in a pinch. Stall latches work, water runs cold only, and the paper towel dispenser was empty by mid-afternoon. Wheelchair stall is genuinely roomy though — wide door, real grab bars on both sides.'},
+     {u:'Theo B.',lv:'Level 5',st:4,when:'1 week ago',helpful:31,tags:['Well lit','Good for kids'],
+      txt:'Bringing two kids here weekly. Changing table in both restrooms, which is the whole reason this is my default stop in the park. Lighting is good at night and the park staff actually respond when you report something.',
+      reply:{u:'Parks Dept · Verified',txt:'Thanks Theo — the second changing table went in after requests here. Report outages through the app and we route them to the morning crew.'}}
+   ]},
+
+  {id:'b2', name:'Bell & Bean Coffee', kind:'Coffee shop · 1 single-occupancy room', addr:'412 5th Ave',
+   x:196, y:300, dist:0.2, walk:4, rating:4.6, count:389, access:'code', code:'4 2 6 9',
+   accessNote:'Keypad on the door. Code is printed at the bottom of your receipt and rotates monthly — the one below was confirmed today.',
+   hours:'6:30 AM – 8:00 PM', updated:'1 hour ago', updatedBy:'@sofiaq', confirms:14,
+   scenes:[['single','sand'],['sink','sand'],['door','sand']],
+   scores:{clean:4.8, privacy:5.0, supplies:4.6, wait:3.4},
+   amen:['Gender neutral','Single occupancy','Soap &amp; paper towels','Menstrual products','Baby changing table'], missing:['No purchase needed'],
+   reviews:[
+     {u:'Sofia Q.',lv:'Level 3',st:5,when:'1 hour ago',helpful:42,scenes:[['single','sand'],['sink','sand']],tags:['Spotless','Code on receipt','Great smell'],
+      txt:'The gold standard for a cafe bathroom. One room, locks properly, cleaned on a visible schedule sheet on the back of the door — last entry was 40 minutes before I went in. They stock actual hand cream. You do have to buy something, but a drip coffee is three dollars.'},
+     {u:'Daniel W.',lv:'Level 1',st:4,when:'3 days ago',helpful:7,tags:['One room only'],
+      txt:'Very clean, but there is exactly one room for a busy shop. Waited about six minutes behind two people at 8am. Go at off-peak times if you can.'},
+     {u:'Renee A.',lv:'Level 4',st:5,when:'2 weeks ago',helpful:23,tags:['Free products','Gender neutral'],
+      txt:'They keep free menstrual products in a basket, no vending machine nonsense, and the sign on the door is gender neutral. Small things that make it the one I route friends to.'}
+   ]},
+
+  {id:'b3', name:'Nolan Street Transit Center', kind:'Transit hub · Concourse level', addr:'Nolan St & 3rd, lower concourse',
+   x:250, y:186, dist:0.3, walk:6, rating:2.9, count:512, access:'open',
+   accessNote:'Always open while trains run. Attendant booth at the entrance is staffed on weekday evenings only.',
+   hours:'Open 24 hours', updated:'4 hours ago', updatedBy:'@transitrider', confirms:3,
+   scenes:[['stalls','grime'],['sink','grime'],['sign','grime']],
+   scores:{clean:2.1, privacy:2.6, supplies:2.4, wait:3.8},
+   amen:['Open 24 hours','No purchase needed','Free to use','Wheelchair accessible','Attendant on duty'], missing:['Baby changing table'],
+   reviews:[
+     {u:'Ava L.',lv:'Level 3',st:2,when:'4 hours ago',helpful:56,scenes:[['stalls','grime']],tags:['Rough at night','Bring your own paper'],
+      txt:'It is open, it is free, and that is the entire pitch. Two of six stalls had working latches, no soap in three of the four dispensers. Fine if you are desperate before a train, and honestly that is most people here.'},
+     {u:'Jorge M.',lv:'Level 5',st:3,when:'5 days ago',helpful:29,tags:['Better on weekday evenings'],
+      txt:'Big difference when the attendant booth is staffed — weekday evenings it is night and day cleaner. Weekends after 9pm I would keep walking to the library or the market instead.'},
+     {u:'Hana T.',lv:'Level 2',st:4,when:'2 weeks ago',helpful:11,tags:['Accessible stall works'],
+      txt:'Giving four stars purely for the accessible stall, which is enormous and had a working door button. The rest is what you expect from a transit station at rush hour.'}
+   ]},
+
+  {id:'b4', name:'Midtown Central Library, 2nd Floor', kind:'Public library · Quiet floor', addr:'88 Harbor Blvd, second floor',
+   x:150, y:230, dist:0.4, walk:8, rating:4.8, count:176, access:'open',
+   accessNote:'No key, no code, no purchase. Second floor is quieter than the ground floor pair — go up one flight.',
+   hours:'9:00 AM – 8:00 PM (Sun to 5)', updated:'Yesterday', updatedBy:'@quietfloor', confirms:9,
+   scenes:[['sink','blue'],['stalls','blue'],['single','blue']],
+   scores:{clean:4.9, privacy:4.7, supplies:4.8, wait:4.9},
+   amen:['No purchase needed','Free to use','Wheelchair accessible','Gender neutral','Menstrual products','Soap &amp; paper towels'], missing:['Open 24 hours'],
+   reviews:[
+     {u:'Nadia S.',lv:'Level 5',st:5,when:'Yesterday',helpful:64,scenes:[['sink','blue'],['stalls','blue']],tags:['Spotless','No purchase needed','Quiet'],
+      txt:'If you are anywhere near Harbor Blvd, walk the extra two blocks. Cleaned hourly, always stocked, nobody hurries you, and there is a gender neutral single room by the study carrels if you want the door to lock behind you. This is what public infrastructure is supposed to feel like.'},
+     {u:'Owen R.',lv:'Level 2',st:5,when:'6 days ago',helpful:18,tags:['Best in Midtown'],
+      txt:'Ground floor gets slammed after school lets out. Second floor is the secret. Never waited more than a minute.'}
+   ]},
+
+  {id:'b5', name:'Fillmore Public Market', kind:'Food hall · Back corridor', addr:'1200 Fillmore St, past the fishmonger',
+   x:270, y:404, dist:0.5, walk:10, rating:4.3, count:640, access:'open',
+   accessNote:'Down the corridor behind the fish counter — unmarked green door, keep going, it is further than you think.',
+   hours:'7:00 AM – 9:00 PM', updated:'3 hours ago', updatedBy:'@marketrat', confirms:11,
+   scenes:[['stalls','cream'],['sink','cream'],['door','cream'],['sign','cream']],
+   scores:{clean:4.2, privacy:4.0, supplies:4.4, wait:3.6},
+   amen:['No purchase needed','Free to use','Baby changing table','Wheelchair accessible','Soap &amp; paper towels'], missing:['Gender neutral'],
+   reviews:[
+     {u:'Kenji O.',lv:'Level 4',st:4,when:'3 hours ago',helpful:37,scenes:[['stalls','cream']],tags:['Hard to find','Clean','Busy at lunch'],
+      txt:'The directions matter: go past the fishmonger, down the corridor, unmarked green door on the left. Six stalls, attendant comes through every hour or so, and there is a bench outside for the line at noon.'},
+     {u:'Bea C.',lv:'Level 3',st:5,when:'1 week ago',helpful:22,tags:['Baby changing'],
+      txt:'Changing table is a fold-down in the accessible stall and it was clean, which I do not take for granted. Market staff pointed me there without making it weird.'},
+     {u:'Sam D.',lv:'Level 1',st:3,when:'3 weeks ago',helpful:5,tags:['Long line at lunch'],
+      txt:'Nice enough, but between noon and 1 the line was eight people deep. Come before 11:30.'}
+   ]},
+
+  {id:'b6', name:'Grand Plaza Mall, Level 3', kind:'Shopping mall · Family restroom wing', addr:'Grand Plaza, level 3 near the atrium',
+   x:298, y:262, dist:0.6, walk:12, rating:4.5, count:903, access:'open',
+   accessNote:'Open to everyone, no purchase. Level 3 wing is newer and far cleaner than the food court pair on Level 1.',
+   hours:'10:00 AM – 9:00 PM', updated:'Today', updatedBy:'@plazaregular', confirms:8,
+   scenes:[['sink','slate'],['single','slate'],['stalls','slate']],
+   scores:{clean:4.6, privacy:4.4, supplies:4.7, wait:4.2},
+   amen:['No purchase needed','Free to use','Baby changing table','Wheelchair accessible','Single occupancy','Attendant on duty'], missing:['Open 24 hours'],
+   reviews:[
+     {u:'Lena F.',lv:'Level 3',st:5,when:'Today',helpful:26,scenes:[['single','slate']],tags:['Family room','Attendant on site'],
+      txt:'The family room on this level is a full private room with a sink at kid height and a fold-out table. Attendant signs the log by the door every 30 minutes and it shows.'},
+     {u:'Curtis H.',lv:'Level 2',st:4,when:'4 days ago',helpful:12,tags:['Skip level 1'],
+      txt:'Whatever you do, do not settle for the food court ones on Level 1. Take the escalator up. Completely different experience for one extra minute of walking.'}
+   ]},
+
+  {id:'b7', name:'Sunset Gas & Go', kind:'Gas station · Exterior door', addr:'2200 Marine Way',
+   x:60, y:470, dist:0.7, walk:14, rating:2.2, count:148, access:'ask',
+   accessNote:'Ask the cashier for the key — it is on a wooden paddle. Door is around the side of the building, not inside.',
+   hours:'5:00 AM – 12:00 AM', updated:'6 hours ago', updatedBy:'@nightdriver', confirms:2,
+   scenes:[['door','grime'],['single','grime']],
+   scores:{clean:1.8, privacy:3.4, supplies:1.6, wait:4.4},
+   amen:['Single occupancy','Free to use'], missing:['Wheelchair accessible','Baby changing table'],
+   reviews:[
+     {u:'Ruth E.',lv:'Level 4',st:2,when:'6 hours ago',helpful:19,tags:['Key at counter','Bring your own paper'],
+      txt:'Key is on a paddle the size of a canoe oar, door is around the side. No soap, no towels, no lock on the inside handle that I could trust. Emergency use only, and I mean emergency.'},
+     {u:'Vince A.',lv:'Level 1',st:3,when:'2 weeks ago',helpful:4,tags:['Open late'],
+      txt:'Not clean but it is open until midnight and there is nothing else on this stretch of Marine Way. That counts for something at 11pm.'}
+   ]},
+
+  {id:'b8', name:'Riverside Trailhead Vault', kind:'Trailhead · Vault toilet', addr:'Riverside Trail, north lot',
+   x:318, y:120, dist:0.9, walk:18, rating:3.1, count:96, access:'open',
+   accessNote:'Vault toilet — no running water and no plumbing. There is a hand sanitizer dispenser mounted outside the door.',
+   hours:'Open 24 hours', updated:'2 days ago', updatedBy:'@trailmix', confirms:4,
+   scenes:[['door','sand'],['single','sand']],
+   scores:{clean:2.8, privacy:4.6, supplies:2.2, wait:4.9},
+   amen:['Open 24 hours','No purchase needed','Free to use','Wheelchair accessible'], missing:['Soap &amp; paper towels'],
+   reviews:[
+     {u:'Gil P.',lv:'Level 3',st:3,when:'2 days ago',helpful:8,tags:['No running water','Never a wait'],
+      txt:'It is a vault toilet, so calibrate expectations: no water, no smell control beyond the vent stack. Clean-ish, well ventilated, never occupied. Bring sanitizer in case the outside dispenser is dry, which it was.'}
+   ]},
+
+  {id:'b9', name:'Copper Kettle Diner', kind:'Diner · Rear hallway', addr:'77 Nolan St',
+   x:212, y:150, dist:1.0, walk:20, rating:4.0, count:205, access:'customer',
+   accessNote:'Customers only and the staff do check. Sit down, order something, then the hallway past the kitchen is on your right.',
+   hours:'7:00 AM – 11:00 PM', updated:'Yesterday', updatedBy:'@pieforever', confirms:5,
+   scenes:[['sink','cream'],['stalls','cream']],
+   scores:{clean:4.1, privacy:4.2, supplies:4.0, wait:4.3},
+   amen:['Soap &amp; paper towels','Single occupancy','Gender neutral'], missing:['No purchase needed','Baby changing table'],
+   reviews:[
+     {u:'Marisol V.',lv:'Level 2',st:4,when:'Yesterday',helpful:14,tags:['Customers only','Clean'],
+      txt:'Two single rooms in the back hallway, both gender neutral, both clean at 9pm on a Friday which is the real test. You genuinely have to be a customer, but the pie is a fair price of admission.'}
+   ]},
+
+  {id:'b10', name:'Harbor Aquatic Center', kind:'Rec center · Lobby restrooms', addr:'15 Marine Way',
+   x:120, y:520, dist:1.2, walk:24, rating:4.4, count:132, access:'open',
+   accessNote:'Lobby restrooms are before the ticket desk, so you do not need a pass. The locker rooms past the desk do need one.',
+   hours:'5:30 AM – 9:30 PM', updated:'3 days ago', updatedBy:'@lapswimmer', confirms:7,
+   scenes:[['sink','blue'],['stalls','blue']],
+   scores:{clean:4.5, privacy:4.1, supplies:4.6, wait:4.7},
+   amen:['No purchase needed','Free to use','Wheelchair accessible','Baby changing table','Soap &amp; paper towels'], missing:['Open 24 hours'],
+   reviews:[
+     {u:'Dev S.',lv:'Level 4',st:5,when:'3 days ago',helpful:16,tags:['Before the ticket desk','Spotless'],
+      txt:'Key detail people miss: the lobby pair sits before the ticket desk, so no membership needed. Municipal cleaning schedule, always stocked, and there is a bench and a water fountain right there.'}
+   ]},
+
+  {id:'b11', name:'The Dockyard Brewery', kind:'Taproom · Mezzanine', addr:'350 Marine Way, upstairs',
+   x:236, y:560, dist:1.4, walk:28, rating:4.7, count:318, access:'open',
+   accessNote:'Open to anyone during taproom hours, nobody at the door. Upstairs mezzanine set is much quieter than the one by the bar.',
+   hours:'12:00 PM – 12:00 AM', updated:'Today', updatedBy:'@hopsnhops', confirms:10,
+   scenes:[['single','slate'],['sign','slate'],['sink','slate']],
+   scores:{clean:4.7, privacy:4.8, supplies:4.5, wait:4.0},
+   amen:['Gender neutral','Single occupancy','Soap &amp; paper towels','Menstrual products'], missing:['Baby changing table'],
+   reviews:[
+     {u:'Ines G.',lv:'Level 5',st:5,when:'Today',helpful:33,scenes:[['single','slate']],tags:['Gender neutral','Great music','Clean'],
+      txt:'Four single rooms upstairs, all gender neutral, all with real locks and full length mirrors. They play the same music as the taproom inside, which sounds silly until you are in there and it is genuinely nice.'},
+     {u:'Pat L.',lv:'Level 2',st:4,when:'1 week ago',helpful:9,tags:['Busy after 8'],
+      txt:'Great rooms, but after 8pm on a weekend there is a short line even upstairs. Still faster than downstairs.'}
+   ]},
+
+  {id:'b12', name:'5th & Vine Parking Garage', kind:'Parking structure · Stairwell level B', addr:'5th & Vine, level B',
+   x:172, y:432, dist:1.5, walk:30, rating:1.6, count:74, access:'locked',
+   accessNote:'Locked since the spring and the attendant has no key. Listed so you stop walking down there — this one is confirmed closed.',
+   hours:'Closed indefinitely', updated:'5 days ago', updatedBy:'@parkinglot', confirms:12,
+   scenes:[['door','grime']],
+   scores:{clean:1.4, privacy:2.0, supplies:1.2, wait:3.0},
+   amen:[], missing:['Wheelchair accessible','Free to use','Soap &amp; paper towels'],
+   reviews:[
+     {u:'Otis N.',lv:'Level 3',st:1,when:'5 days ago',helpful:41,tags:['Locked','Do not bother'],
+      txt:'Walked down two levels of stairwell for a padlocked door. Twelve other people have now confirmed it is locked. Save yourself the trip — the library is four minutes away and it is not close.'}
+   ]}
+];
+
+const FILTERS = [
+  {id:'open',   label:'Unlocked now',        test:b=>b.access==='open'},
+  {id:'nopurchase', label:'No purchase',     test:b=>b.amen.includes('No purchase needed')},
+  {id:'clean',  label:'4.0+ clean',          test:b=>b.scores.clean>=4},
+  {id:'access', label:'Wheelchair',          test:b=>b.amen.includes('Wheelchair accessible')},
+  {id:'baby',   label:'Baby changing',       test:b=>b.amen.includes('Baby changing table')},
+  {id:'neutral',label:'Gender neutral',      test:b=>b.amen.includes('Gender neutral')},
+  {id:'24h',    label:'Open 24h',            test:b=>b.amen.includes('Open 24 hours')}
+];
+
+const ME = {
+  name:'Dana Reyes', handle:'@danareyes', initials:'DR', color:'#0F7B72',
+  level:3, levelName:'Sanitation Scout', points:1240, next:2000,
+  stats:{reviews:34, photos:61, saves:2},
+  badges:[
+    {icon:I.medal, name:'First Flush', sub:'Your first review'},
+    {icon:I.camera, name:'Photo Plumber', sub:'50 photos posted'},
+    {icon:I.sparkle, name:'Grout Truther', sub:'25 cleanliness ratings'},
+    {icon:I.key, name:'Codebreaker', sub:'Share 10 door codes', locked:true}
+  ],
+  activity:[
+    {icon:I.pen, html:'Reviewed <b>Bell &amp; Bean Coffee</b> — 5 stars', when:'1h'},
+    {icon:I.check, html:'Confirmed <b>Harborview Park Restroom</b> is unlocked', when:'2h'},
+    {icon:I.camera, html:'Added 2 photos to <b>Fillmore Public Market</b>', when:'Tue'},
+    {icon:I.flag, html:'Reported <b>5th &amp; Vine Parking Garage</b> as locked', when:'Fri'},
+    {icon:I.plus, html:'Added <b>Harbor Aquatic Center</b> to the map', when:'Mar 2'}
+  ]
+};
+</script>

@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bathroom Finder — moderator</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Public+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+<style>
+  body{padding:22px; max-width:900px; margin:0 auto; background:var(--porcelain)}
+  header{display:flex; align-items:baseline; justify-content:space-between; gap:16px; margin-bottom:6px; flex-wrap:wrap}
+  h1{font-size:23px}
+  .sub{color:var(--ink-2); font-size:13px; line-height:1.6; margin:0 0 20px}
+  .gate{max-width:380px}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; margin-bottom:22px}
+  .queue{display:flex; flex-direction:column; gap:10px}
+  .item{display:grid; grid-template-columns:130px 1fr; gap:14px; background:var(--surface);
+        border:1px solid var(--line-soft); border-radius:16px; padding:12px}
+  .item img{width:130px; height:130px; object-fit:cover; border-radius:12px; background:var(--surface-2)}
+  .meta{display:flex; flex-direction:column; gap:5px; min-width:0}
+  .meta b{font-size:14px}
+  .meta span{font-size:12px; color:var(--ink-2); line-height:1.45}
+  .why{color:var(--code); font-weight:600}
+  .btns{display:flex; gap:8px; margin-top:8px}
+  .fb{background:var(--surface); border:1px solid var(--line-soft); border-radius:14px; padding:12px 14px; margin-bottom:8px}
+  .fb p{margin:0 0 6px; font-size:13.5px; line-height:1.55}
+  .fb .who{font-size:11.5px; color:var(--ink-3)}
+  .tabs{display:flex; gap:8px; margin-bottom:16px}
+  .empty{padding:40px; text-align:center; color:var(--ink-2)}
+</style>
+</head>
+<body>
+
+<div id="gate" class="gate">
+  <h1>Moderator</h1>
+  <p class="sub">This is the queue photos wait in. Nothing a tester uploads is visible to anyone
+  else until it is approved here.</p>
+  <div class="field"><span>Moderator token</span>
+    <input class="input" id="token" type="password" placeholder="ADMIN_TOKEN">
+    <span class="hint">Set <code>ADMIN_TOKEN</code> when starting the server. Defaults to
+    <code>dev-moderator-token</code> for local testing — change it before anyone else can reach the server.</span></div>
+  <button class="btn" id="enter">Open the queue</button>
+  <p class="warn" id="gate-err" hidden></p>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <h1>Moderator</h1>
+    <button class="minibtn" id="refresh">Refresh</button>
+  </header>
+  <div class="grid" id="stats"></div>
+  <div class="tabs">
+    <button class="chip" data-tab="queue" aria-pressed="true">Photo queue</button>
+    <button class="chip" data-tab="feedback" aria-pressed="false">Tester feedback</button>
+    <button class="chip" data-tab="people" aria-pressed="false">People</button>
+  </div>
+  <div id="queue" class="queue"></div>
+  <div id="feedback" hidden></div>
+  <div id="people" hidden></div>
+</div>
+
+<script>
+let TOKEN = sessionStorage.getItem('bf.admin') || '';
+const el = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+const ago = t => { const s=(Date.now()-t)/1000;
+  return s<60?'just now':s<3600?Math.floor(s/60)+' min ago':s<86400?Math.floor(s/3600)+' h ago':Math.floor(s/86400)+' d ago'; };
+
+async function api(path, opts){
+  const res = await fetch(path, {...opts, headers:{'Content-Type':'application/json','X-Admin-Token':TOKEN, ...(opts&&opts.headers)}});
+  if (!res.ok) throw new Error((await res.json().catch(()=>({}))).error || ('HTTP ' + res.status));
+  return res.json();
+}
+
+el('enter').addEventListener('click', async () => {
+  TOKEN = el('token').value.trim();
+  try {
+    await api('/api/v1/moderation/stats');
+    sessionStorage.setItem('bf.admin', TOKEN);
+    el('gate').hidden = true; el('app').hidden = false;
+    load();
+  } catch(err){ el('gate-err').textContent = 'That token was not accepted.'; el('gate-err').hidden = false; }
+});
+el('refresh').addEventListener('click', load);
+document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-tab]').forEach(x => x.setAttribute('aria-pressed','false'));
+  b.setAttribute('aria-pressed','true');
+  el('queue').hidden = b.dataset.tab !== 'queue';
+  el('feedback').hidden = b.dataset.tab !== 'feedback';
+  el('people').hidden = b.dataset.tab !== 'people';
+}));
+
+async function load(){
+  const s = await api('/api/v1/moderation/stats');
+  el('stats').innerHTML = [
+    ['Testers', s.users], ['Reviews', s.reviews], ['Photos', s.photos],
+    ['Awaiting review', s.pending_photos], ['Confirmations', s.confirms],
+    ['Open reports', s.open_reports], ['Places added', s.added_places], ['Feedback', s.feedback]
+  ].map(([k,v]) => `<div class="stat"><b class="num">${v}</b><span>${k}</span></div>`).join('');
+
+  const {photos} = await api('/api/v1/moderation/queue');
+  el('queue').innerHTML = photos.length ? photos.map(p => {
+    const ex = p.scores ? (((p.scores.porn||0)+(p.scores.hentai||0))*100).toFixed(1) : null;
+    return `<div class="item" data-id="${p.id}">
+      <img src="/api/v1/photo?id=${encodeURIComponent(p.id)}" alt="Photo awaiting review">
+      <div class="meta">
+        <b>${esc(p.placeName || p.placeId)}</b>
+        <span>${esc(p.by)} · ${ago(p.at)}</span>
+        <span class="num">${ex != null ? `explicit ${ex}% · suggestive ${((p.scores.sexy||0)*100).toFixed(1)}%` : 'no automatic scores'}${p.faces > 0 ? ` · ${p.faces} face${p.faces===1?'':'s'}` : ''}</span>
+        ${(p.reasons||[]).map(r=>`<span class="why">${esc(r)}</span>`).join('')}
+        <div class="btns">
+          <button class="minibtn yes" data-approve="${p.id}">Publish</button>
+          <button class="minibtn no" data-reject="${p.id}">Reject</button>
+        </div>
+      </div></div>`;
+  }).join('') : '<div class="empty">Nothing waiting. Every uploaded photo lands here first.</div>';
+
+  el('queue').querySelectorAll('[data-approve]').forEach(b => b.addEventListener('click', () => decide(b.dataset.approve, 'approved')));
+  el('queue').querySelectorAll('[data-reject]').forEach(b => b.addEventListener('click', () => decide(b.dataset.reject, 'rejected')));
+
+  const {users} = await api('/api/v1/moderation/users');
+  el('people').innerHTML = users.length ? users.map(u => `
+    <div class="fb" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap">
+      <div style="flex:1; min-width:180px">
+        <p style="margin:0 0 4px"><b>${esc(u.name)}</b>${u.blocked ? ' <span class="pill locked">Blocked</span>' : ''}</p>
+        <div class="who">joined ${ago(u.at)} · ${u.reviews} review${u.reviews===1?'':'s'} · ${u.photos} photo${u.photos===1?'':'s'} · ${u.reportsMade} report${u.reportsMade===1?'':'s'} filed</div>
+      </div>
+      <button class="minibtn ${u.blocked ? 'yes' : 'no'}" data-block="${u.id}" data-to="${u.blocked ? 'false' : 'true'}">
+        ${u.blocked ? 'Unblock' : 'Block'}</button>
+    </div>`).join('') : '<div class="empty">Nobody has registered yet.</div>';
+  el('people').querySelectorAll('[data-block]').forEach(b => b.addEventListener('click', async () => {
+    const to = b.dataset.to === 'true';
+    if (to && !confirm('Block this person? Their reviews disappear for everyone and their photos come down.')) return;
+    await api('/api/v1/moderation/block', {method:'POST', body:JSON.stringify({userId:b.dataset.block, blocked:to})});
+    load();
+  }));
+
+  const {feedback} = await api('/api/v1/moderation/feedback');
+  el('feedback').innerHTML = feedback.length ? feedback.map(f => `
+    <div class="fb"><p>${esc(f.text)}</p>
+      <div class="who">${esc(f.by)} · ${ago(f.at)}${f.context ? ' · ' + esc(JSON.stringify(f.context)) : ''}</div></div>`).join('')
+    : '<div class="empty">No feedback yet.</div>';
+}
+async function decide(id, state){
+  await api('/api/v1/moderation/decide', {method:'POST', body:JSON.stringify({id, state})});
+  const row = document.querySelector(`[data-id="${id}"]`);
+  if (row) row.remove();
+  load();
+}
+if (TOKEN){ el('token').value = TOKEN; el('enter').click(); }
+</script>
+</body>
+</html>

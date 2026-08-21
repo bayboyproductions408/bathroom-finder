@@ -1,0 +1,15 @@
+# signing material and secrets — never commit
+android/keystore.properties
+android/upload-keystore.jks
+android/*.jks
+certs/
+.env
+
+# generated / local state
+data/
+ledger.json
+node_modules/
+android/.gradle/
+android/build/
+android/app/build/
+*.log

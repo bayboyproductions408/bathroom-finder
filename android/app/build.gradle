@@ -1,0 +1,49 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace 'com.bathroomfinder.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.bathroomfinder.app"
+        minSdk 24                 // TWA needs Chrome 72+; API 24 covers ~97% of devices
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+        manifestPlaceholders = [
+            twaHost     : project.property('twaHost'),
+            twaStartUrl : "https://" + project.property('twaHost') + project.property('twaStartPath')
+        ]
+        resValue "string", "twa_host", project.property('twaHost')
+        resValue "string", "twa_start_url", "https://" + project.property('twaHost') + project.property('twaStartPath')
+    }
+
+    signingConfigs {
+        release {
+            def props = new Properties()
+            def f = rootProject.file('keystore.properties')
+            if (f.exists()) {
+                props.load(new FileInputStream(f))
+                storeFile     file(props['storeFile'])
+                storePassword props['storePassword']
+                keyAlias      props['keyAlias']
+                keyPassword   props['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+}

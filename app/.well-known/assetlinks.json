@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.bathroomfinder.app",
+      "sha256_cert_fingerprints": [
+        "19:39:F0:6B:9B:82:0E:BD:11:B6:F1:9E:E7:18:56:21:63:E6:68:F4:B9:BC:D4:F8:50:F9:4E:89:3D:D2:2D:18"
+      ]
+    }
+  }
+]

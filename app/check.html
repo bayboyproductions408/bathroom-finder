@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bathroom Finder — phone check</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  body{padding:20px 16px calc(30px + env(safe-area-inset-bottom)); max-width:620px; margin:0 auto}
+  h1{font-size:22px; margin-bottom:6px}
+  .lede{color:var(--ink-2); font-size:13.5px; line-height:1.6; margin:0 0 20px}
+  .row{display:grid; grid-template-columns:26px 1fr; gap:11px; padding:12px 0; border-bottom:1px solid var(--line-soft)}
+  .row b{font-size:14px; font-weight:700; display:block}
+  .row span{font-size:12.5px; color:var(--ink-2); line-height:1.5; display:block; margin-top:3px}
+  .mark{font-size:17px; line-height:1.3}
+  .ok{color:var(--open)} .no{color:var(--locked)} .warn{color:var(--code)}
+  .fix{margin-top:7px; font-size:12.5px; line-height:1.55; background:var(--code-soft); color:#4a3608;
+       padding:9px 11px; border-radius:10px}
+  :root[data-theme="dark"] .fix{color:var(--code)}
+  .verdict{padding:15px; border-radius:15px; margin-bottom:20px; font-size:14px; font-weight:700; line-height:1.5}
+  .verdict.good{background:var(--open-soft); color:var(--open)}
+  .verdict.bad{background:var(--locked-soft); color:var(--locked)}
+  .actions{display:flex; flex-direction:column; gap:9px; margin-top:22px}
+  code{font-size:12px; background:var(--surface-2); padding:1px 5px; border-radius:5px}
+</style>
+</head>
+<body>
+<h1>Phone check</h1>
+<p class="lede">Open this on the phone you want to test with. It reports what actually
+works here, so you are not guessing why something is broken.</p>
+
+<div class="verdict" id="verdict">Checking…</div>
+<div id="rows"></div>
+
+<div class="actions">
+  <a class="btn" href="./">Open Bathroom Finder</a>
+  <a class="btn secondary" href="/ca.crt">Install the certificate (iPhone)</a>
+</div>
+
+<script>
+const rows = [];
+const el = id => document.getElementById(id);
+const esc = s => String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+
+function add(name, state, detail, fix){
+  rows.push({name, state, detail, fix});
+  render();
+}
+function render(){
+  el('rows').innerHTML = rows.map(r => `
+    <div class="row">
+      <div class="mark ${r.state === 'ok' ? 'ok' : r.state === 'warn' ? 'warn' : 'no'}">
+        ${r.state === 'ok' ? '&#10003;' : r.state === 'warn' ? '!' : '&#10007;'}</div>
+      <div><b>${esc(r.name)}</b><span>${esc(r.detail)}</span>
+        ${r.fix ? `<div class="fix">${r.fix}</div>` : ''}</div>
+    </div>`).join('');
+  const bad = rows.filter(r => r.state === 'no');
+  const warn = rows.filter(r => r.state === 'warn');
+  const v = el('verdict');
+  if (bad.length){ v.className = 'verdict bad'; v.textContent = `${bad.length} thing${bad.length===1?'':'s'} will not work on this phone. See below.`; }
+  else if (warn.length){ v.className = 'verdict good'; v.textContent = `Everything essential works. ${warn.length} thing${warn.length===1?'':'s'} could be better.`; }
+  else { v.className = 'verdict good'; v.textContent = 'Everything works on this phone.'; }
+}
+
+/* --- what device is this --- */
+const ua = navigator.userAgent;
+const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const iOSVersion = (() => { const m = ua.match(/OS (\d+)_(\d+)/); return m ? +m[1] + (+m[2])/10 : null; })();
+const standalone = window.navigator.standalone === true ||
+                   window.matchMedia('(display-mode: standalone)').matches;
+
+add('Device', 'ok',
+  `${isIOS ? 'iPhone or iPad' : /Android/.test(ua) ? 'Android' : 'Desktop or other'}${iOSVersion ? ' · iOS ' + iOSVersion : ''}` +
+  ` · ${standalone ? 'running as an installed app' : 'running in the browser'}`);
+
+/* --- reached the server at all --- */
+add('Reached this computer', 'ok', `You loaded this page from ${location.host}, so the network path works.`);
+
+/* --- secure context: the gate for location, camera and offline --- */
+if (window.isSecureContext){
+  add('Secure connection', 'ok', 'https is working, so location, camera and offline mode are allowed.');
+} else {
+  add('Secure connection', 'no',
+    `This page is plain http (${location.protocol}//${location.host}). Browsers refuse location and offline mode here.`,
+    'Open the <b>https</b> address instead. If the phone complains the certificate is not trusted, tap the button below to install it.');
+}
+
+/* --- geolocation --- */
+if (!('geolocation' in navigator)){
+  add('Location', 'no', 'This browser has no location support at all.');
+} else if (!window.isSecureContext){
+  add('Location', 'no', 'Blocked because the connection is not https.',
+      'Use the https address. Search still works without location.');
+} else {
+  add('Location', 'warn', 'Available — tap to grant permission and confirm it really works.',
+      '<button class="minibtn" id="geo">Test location now</button>');
+  setTimeout(() => {
+    const b = document.getElementById('geo');
+    if (!b) return;
+    b.addEventListener('click', () => {
+      b.textContent = 'Asking…';
+      navigator.geolocation.getCurrentPosition(
+        p => { rows.find(r => r.name === 'Location').state = 'ok';
+               rows.find(r => r.name === 'Location').detail =
+                 `Working — accurate to about ${Math.round(p.coords.accuracy)} m.`;
+               rows.find(r => r.name === 'Location').fix = null; render(); },
+        e => { const r = rows.find(x => x.name === 'Location');
+               r.state = 'no';
+               r.detail = e.code === 1 ? 'Permission was denied.' : e.code === 3 ? 'Timed out getting a fix.' : 'Failed: ' + e.message;
+               r.fix = e.code === 1 ? 'On iPhone: Settings → Safari → Location → Ask, then reload. In an installed app, Settings → Privacy → Location Services.' : null;
+               render(); },
+        {enableHighAccuracy:true, timeout:12000});
+    });
+  }, 50);
+}
+
+/* --- service worker: offline + install --- */
+if (!('serviceWorker' in navigator)){
+  add('Offline mode', 'no', 'This browser cannot run a service worker, so the app will not work without signal.');
+} else if (!window.isSecureContext){
+  add('Offline mode', 'no', 'Needs https.', 'Use the https address.');
+} else {
+  navigator.serviceWorker.getRegistration().then(reg => {
+    if (reg && reg.active) add('Offline mode', 'ok', 'Registered. The app opens and works with no signal.');
+    else navigator.serviceWorker.register('./sw.js').then(() =>
+        add('Offline mode', 'ok', 'Registered just now. The app will work with no signal.'))
+      .catch(err => add('Offline mode', 'no', 'Could not register: ' + err.message,
+        isIOS ? 'On iPhone this usually means the certificate is not fully trusted. Install it with the button below, then in <b>Settings → General → About → Certificate Trust Settings</b> switch it on.' : null));
+  });
+}
+
+/* --- add to home screen --- */
+if (standalone) add('Installed', 'ok', 'You are running the installed app, not the browser.');
+else if (isIOS) add('Add to home screen', 'warn',
+  'Not installed yet. It runs better installed: full screen, own icon, works offline.',
+  'In Safari tap the <b>Share</b> button, then <b>Add to Home Screen</b>. This only works in Safari, not Chrome on iPhone.');
+else add('Add to home screen', 'warn', 'Not installed yet.', 'Use your browser menu → Install app.');
+
+/* --- camera / photos --- */
+const input = document.createElement('input');
+input.type = 'file';
+add('Photos', 'capture' in input || isIOS ? 'ok' : 'warn',
+  'capture' in input || isIOS ? 'You can take or choose a photo for a review.' : 'File picking works; direct camera capture may not.');
+
+/* --- storage --- */
+try {
+  localStorage.setItem('bf.check', '1'); localStorage.removeItem('bf.check');
+  add('Saving your data', 'ok', 'Local storage works, so saved bathrooms and drafts persist.');
+} catch(e){
+  add('Saving your data', 'no', 'Local storage is blocked.',
+      isIOS ? 'Private Browsing blocks this on iPhone. Open a normal Safari tab.' : 'Check your browser privacy settings.');
+}
+
+/* --- the shared backend --- */
+fetch('/api/v1/health').then(r => r.json()).then(h => {
+  add('Shared database', h && h.ok ? 'ok' : 'no',
+      h && h.ok ? 'Connected. What you add is shared with other testers.' : 'Server answered oddly.');
+}).catch(err => add('Shared database', 'no', 'Cannot reach the backend: ' + err.message,
+  'The app still works, but everything you add stays on this phone only.'));
+
+/* --- screen fit --- */
+setTimeout(() => {
+  const h = window.innerHeight, dvh = document.documentElement.clientHeight;
+  add('Screen fit', Math.abs(h - dvh) < 120 ? 'ok' : 'warn',
+      `Viewport ${window.innerWidth}×${h}. Safe area bottom: ${getComputedStyle(document.body).paddingBottom}.`);
+}, 300);
+</script>
+</body>
+</html>
