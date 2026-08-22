@@ -14,7 +14,7 @@
    personal data. Testers pick a display name and that is all we hold.
    ===================================================================== */
 'use strict';
-const { openStore } = require('./db.js');
+const { openStore, tursoClientAvailable } = require('./db.js');
 const crypto = require('node:crypto');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -301,7 +301,10 @@ function createAPI({file, adminToken, url, authToken}){
        exposed — never the URL, and never the token. */
     'GET /api/v1/health': async () => ({
       ok: true, version: 1, time: now(),
-      storage: db.kind, durable: db.kind === 'turso'}),
+      storage: db.kind, durable: db.kind === 'turso',
+      /* false means this host skipped the dependency install, and switching
+         on Turso would take the service down rather than make it durable */
+      tursoReady: tursoClientAvailable()}),
 
     'POST /api/v1/register': async (req, body, ip) => {
       if (!rateLimit('reg:' + ip, 20, 3600000)) bad(429, 'Too many registrations from here');

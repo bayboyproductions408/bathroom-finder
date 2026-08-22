@@ -90,6 +90,16 @@ function openTurso(url, authToken){
   };
 }
 
+/* Whether the libSQL client is installed and loadable — asked before anyone
+   sets TURSO_DATABASE_URL, because the answer decides whether setting it
+   brings the service up or takes it down. A host that skips the install step
+   is otherwise indistinguishable from a healthy one until the moment it
+   matters. */
+function tursoClientAvailable(){
+  try { require.resolve('@libsql/client'); return true; }
+  catch(e){ return false; }
+}
+
 function openStore({file, url, authToken} = {}){
   const tursoUrl = url || process.env.TURSO_DATABASE_URL;
   const tursoToken = authToken || process.env.TURSO_AUTH_TOKEN;
@@ -114,7 +124,13 @@ function openStore({file, url, authToken} = {}){
     }
   }
   console.log('storage: local file (WIPED ON RESTART — set TURSO_DATABASE_URL for durable storage)');
+  if (!tursoClientAvailable()){
+    /* Say this now, while it is a warning. Discovered later — at the moment
+       someone sets TURSO_DATABASE_URL — it is an outage instead. */
+    console.log('  note: @libsql/client is not installed here, so setting');
+    console.log('        TURSO_DATABASE_URL would fail to start. Run npm install first.');
+  }
   return openLocal(file);
 }
 
-module.exports = {openStore, openLocal, openTurso};
+module.exports = {openStore, openLocal, openTurso, tursoClientAvailable};
