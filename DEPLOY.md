@@ -51,24 +51,73 @@ Open `https://<your-url>/check.html` on the iPhone. Everything should be green:
 https, location, offline mode, photos, storage, shared database. Then **Share →
 Add to Home Screen** in Safari.
 
-### Two things about Render's free tier
+### One thing about Render's free tier
 
-- **It sleeps after 15 minutes idle.** The next request takes ~30–60s to wake it.
-  Fine for testing; warn your testers so they don't think it's broken.
-- **The disk is not persistent.** SQLite lives in `data/`, which is wiped on every
-  restart and deploy — so reviews will vanish when it sleeps. Fine for a first
-  hands-on test, not fine for collecting real data from real testers.
+**It sleeps after 15 minutes idle.** The next request takes ~30–60s to wake it.
+Fine for testing; warn your testers so they don't think it's broken.
 
-### Making the data survive, still free
+Its disk is also wiped on every restart — which is why the data lives somewhere
+else now. That is the next section, and it is the one step you have to do
+yourself.
 
-When you want durability, the cheapest real option is **Turso** — SQLite as a
-service, free tier, no card. The backend is deliberately isolated in
-`server/api.js`, so this is a contained change: swap the `node:sqlite` calls for
-Turso's client and keep every route identical. Say the word and I'll do it.
+---
 
-Alternatives if you'd rather not: **Fly.io** (small persistent volume, needs a card
-on file even on free allowances) or a **$4–5/month VPS** (full control, keeps
-working, no sleeping).
+## Making the data survive — Turso (free, no card)
+
+Without this, every deploy and every sleep-wake deletes all reviews. The code is
+already written and tested; it switches on when these two variables exist.
+
+**1. Create the database** — at [turso.tech](https://turso.tech), sign up (GitHub
+sign-in works) and create a database. The free tier is 5 GB, 500 M row reads and
+10 M writes a month; no card is asked for. Any name is fine.
+
+**2. Copy the two values** Turso shows you:
+
+- the **database URL**, which looks like `libsql://something.turso.io`
+- an **auth token**, a long string
+
+**3. Put them into Render** — Dashboard → your service → **Environment** → *Add
+environment variable*, twice:
+
+| Key | Value |
+|---|---|
+| `TURSO_DATABASE_URL` | the `libsql://…` URL |
+| `TURSO_AUTH_TOKEN` | the token |
+
+Save. Render redeploys on its own.
+
+**4. Confirm it took.** The deploy log's first line says which storage it picked:
+
+```
+storage: turso (durable)
+```
+
+If it instead says `local file (WIPED ON RESTART …)`, the variables did not
+arrive — check the spelling of the key names.
+
+The token is a credential: paste it straight into Render and nowhere else. It
+does not belong in the repository, and I have not asked you to show it to me.
+
+**What the server does if the URL is set but the connection fails:** it stops,
+loudly, saying whether the client is missing or the credentials are wrong. It
+deliberately does **not** fall back to the local disk — that would look like a
+successful deploy and quietly throw away everything written before the next
+restart.
+
+### Verifying durability yourself
+
+```bash
+npm test
+```
+
+The `durability` suite writes a review, closes the database, reopens it and
+checks the review, the rating, the device's identity token and the duplicate
+guard all survived. It runs against the same libSQL driver production uses.
+
+### If you would rather not use Turso
+
+**Render disk** — $7/month, a toggle in the dashboard, no code change. Or
+**Fly.io** volumes (free allowance, but a card on file).
 
 ---
 

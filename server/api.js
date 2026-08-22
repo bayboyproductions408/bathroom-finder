@@ -4,27 +4,26 @@
    This is the thing that turns the app from single-player into something
    worth testing: a review written by one person is seen by everyone else.
 
-   Storage is SQLite through node:sqlite, built into Node 24 — no npm, no
-   external service, one file on disk. It moves to Postgres later by
-   swapping this file; the HTTP shape stays the same.
+   Storage is SQLite, reached through server/db.js, which picks its backing
+   from the environment: a local file for tests and development, or Turso
+   over the network when TURSO_DATABASE_URL is set. Every query here is
+   awaited, so the two are interchangeable and the free host's habit of
+   wiping its disk stops mattering.
 
    Identity is a device token, not an account: no email, no password, no
    personal data. Testers pick a display name and that is all we hold.
    ===================================================================== */
 'use strict';
-const { DatabaseSync } = require('node:sqlite');
+const { openStore } = require('./db.js');
 const crypto = require('node:crypto');
 const path = require('node:path');
 const fs = require('node:fs');
 
 const MAX_PHOTO_BYTES = 900 * 1024;
 
-function open(file){
-  fs.mkdirSync(path.dirname(file), {recursive:true});
-  const db = new DatabaseSync(file);
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec(`
+function open(opts){
+  const db = openStore(opts);
+  const schema = db.exec(`
     CREATE TABLE IF NOT EXISTS users(
       id TEXT PRIMARY KEY, token_hash TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'user', blocked INTEGER NOT NULL DEFAULT 0,
@@ -46,8 +45,10 @@ function open(file){
       hidden INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL,
       local_id TEXT);
     CREATE INDEX IF NOT EXISTS reviews_place ON reviews(place_id);
-    CREATE UNIQUE INDEX IF NOT EXISTS reviews_local ON reviews(user_id, local_id)
-      WHERE local_id IS NOT NULL;
+    /* reviews_local is NOT created here. On a database that predates local_id
+       the table already exists, CREATE TABLE IF NOT EXISTS leaves it alone, and
+       indexing a column that is not there aborts the whole script. It is
+       created below, after the ALTER TABLE that guarantees the column. */
 
     CREATE TABLE IF NOT EXISTS photos(
       id TEXT PRIMARY KEY, place_id TEXT NOT NULL, review_id TEXT,
@@ -98,9 +99,21 @@ function open(file){
       note TEXT, lat REAL, lng REAL, created INTEGER NOT NULL,
       handled INTEGER NOT NULL DEFAULT 0);
   `);
-  /* existing deployments predate local_id; add it without losing data */
-  try { db.exec('ALTER TABLE reviews ADD COLUMN local_id TEXT'); } catch(e){ /* already there */ }
-  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS reviews_local ON reviews(user_id, local_id) WHERE local_id IS NOT NULL'); } catch(e){}
+  /* Statements are prepared lazily by the driver, so nothing here has to
+     finish before createAPI returns — callers await db.ready instead, which
+     keeps require-time construction synchronous. */
+  db.ready = schema.then(async () => {
+    /* existing deployments predate local_id; add it without losing data */
+    try { await db.exec('ALTER TABLE reviews ADD COLUMN local_id TEXT'); } catch(e){ /* already there */ }
+    try { await db.exec('CREATE UNIQUE INDEX IF NOT EXISTS reviews_local ON reviews(user_id, local_id) WHERE local_id IS NOT NULL'); } catch(e){}
+  });
+  /* Say what actually went wrong. Without a handler this surfaces as a bare
+     unhandled rejection at some unrelated moment later; the await in handle()
+     still sees the rejection and turns it into a 500. */
+  db.ready.catch(err => {
+    console.error('\nDatabase schema could not be created:');
+    console.error('  ' + err.message + '\n');
+  });
   return db;
 }
 
@@ -127,8 +140,8 @@ class HttpError extends Error {
 }
 const bad = (s, m) => { throw new HttpError(s, m); };
 
-function createAPI({file, adminToken}){
-  const db = open(file);
+function createAPI({file, adminToken, url, authToken}){
+  const db = open({file, url, authToken});
 
   const q = {
     userByToken: db.prepare('SELECT * FROM users WHERE token_hash = ?'),
@@ -230,16 +243,16 @@ function createAPI({file, adminToken}){
                     (SELECT COUNT(*) FROM feedback WHERE done=0) feedback`)
   };
 
-  const auth = req => {
+  const auth = async req => {
     const h = req.headers.authorization || '';
     const token = h.startsWith('Bearer ') ? h.slice(7) : null;
     if (!token) return null;
-    const u = q.userByToken.get(hash(token));
+    const u = await q.userByToken.get(hash(token));
     if (!u) return null;
     if (u.blocked) bad(403, 'This device has been blocked');
     return u;
   };
-  const need = req => auth(req) || bad(401, 'Register first');
+  const need = async req => (await auth(req)) || bad(401, 'Register first');
   const isAdmin = req => {
     const h = req.headers['x-admin-token'];
     return !!(adminToken && h && crypto.timingSafeEqual(
@@ -248,34 +261,34 @@ function createAPI({file, adminToken}){
   const needAdmin = req => { if (!isAdmin(req)) bad(403, 'Moderator token required'); };
 
   /* keep an OSM place around once it has community data attached */
-  function ensurePlace(p, userId){
+  async function ensurePlace(p, userId){
     if (!p || !p.id) bad(400, 'A place is required');
-    const existing = q.getPlace.get(p.id);
+    const existing = await q.getPlace.get(p.id);
     if (existing) return existing;
     if (typeof p.lat !== 'number' || typeof p.lng !== 'number') bad(400, 'That place has no coordinates');
-    q.upsertPlace.run(p.id, p.source || (String(p.id).startsWith('osm:') ? 'osm' : 'local'),
+    await q.upsertPlace.run(p.id, p.source || (String(p.id).startsWith('osm:') ? 'osm' : 'local'),
       p.cat || 'toilets', p.lat, p.lng, String(p.name || 'Unnamed').slice(0, 120),
       String(p.sub || '').slice(0, 120), json(p.tags || {}), userId || null, now());
-    return q.getPlace.get(p.id);
+    return await q.getPlace.get(p.id);
   }
 
-  function placeBundle(id, viewerId){
-    const stats = q.statsFor.get(id) || {n:0, avg:null};
+  async function placeBundle(id, viewerId){
+    const stats = await q.statsFor.get(id) || {n:0, avg:null};
     const corrections = {};
-    for (const c of q.corrFor.all(id)) if (!corrections[c.kind]) corrections[c.kind] = parse(c.value, null);
-    const photos = q.photosFor.all(id).map(p => ({id:p.id, by:p.user_id, state:p.state}));
-    const mine = viewerId ? q.myPhotosFor.all(id, viewerId).filter(p => p.state !== 'approved')
+    for (const c of await q.corrFor.all(id)) if (!corrections[c.kind]) corrections[c.kind] = parse(c.value, null);
+    const photos = (await q.photosFor.all(id)).map(p => ({id:p.id, by:p.user_id, state:p.state}));
+    const mine = viewerId ? (await q.myPhotosFor.all(id, viewerId)).filter(p => p.state !== 'approved')
                                 .map(p => ({id:p.id, by:p.user_id, state:p.state})) : [];
     return {
       id,
-      reviews: q.reviewsFor.all(id).map(r => ({
+      reviews: (await q.reviewsFor.all(id)).map(r => ({
         id:r.id, localId:r.local_id, mine: viewerId ? r.user_id === viewerId : false,
         user:r.user_name, stars:r.stars, text:r.text,
         tags:parse(r.tags, []), sub:parse(r.sub, null), at:r.created,
         photos: [] })),
       stats: {count: stats.n || 0, rating: stats.avg ? Math.round(stats.avg*10)/10 : null},
-      confirms: q.confirmsFor.all(id).map(c => ({at:c.created, status:c.status})),
-      reports: q.reportsFor.all('place', id).map(r => ({kind:r.kind, at:r.created})),
+      confirms: (await q.confirmsFor.all(id)).map(c => ({at:c.created, status:c.status})),
+      reports: (await q.reportsFor.all('place', id)).map(r => ({kind:r.kind, at:r.created})),
       corrections,
       photos: photos.concat(mine)
     };
@@ -283,152 +296,153 @@ function createAPI({file, adminToken}){
 
   /* ---------------- routes ---------------- */
   const routes = {
-    'GET /api/v1/health': () => ({ok:true, version:1, time:now()}),
+    'GET /api/v1/health': async () => ({ok:true, version:1, time:now()}),
 
-    'POST /api/v1/register': (req, body, ip) => {
+    'POST /api/v1/register': async (req, body, ip) => {
       if (!rateLimit('reg:' + ip, 20, 3600000)) bad(429, 'Too many registrations from here');
       const name = String(body.name || '').trim().slice(0, 40) || 'Anonymous';
       const token = crypto.randomBytes(24).toString('base64url');
       const id = uid('u');
-      q.insertUser.run(id, hash(token), name, 'user', now());
+      await q.insertUser.run(id, hash(token), name, 'user', now());
       return {userId:id, token, name};
     },
 
-    'POST /api/v1/me': (req, body) => {
-      const u = need(req);
-      if (body.name){ q.renameUser.run(String(body.name).trim().slice(0,40), u.id); }
+    'POST /api/v1/me': async (req, body) => {
+      const u = await need(req);
+      if (body.name){ await q.renameUser.run(String(body.name).trim().slice(0,40), u.id); }
       return {userId:u.id, name: body.name ? String(body.name).trim().slice(0,40) : u.name, role:u.role};
     },
 
     /* community data for everything in view, in one round trip */
-    'GET /api/v1/places': (req, body, ip, url) => {
+    'GET /api/v1/places': async (req, body, ip, url) => {
       const bbox = String(url.searchParams.get('bbox') || '').split(',').map(Number);
       if (bbox.length !== 4 || bbox.some(isNaN)) bad(400, 'bbox=south,west,north,east is required');
       const [s, w, n, e] = bbox;
-      const viewer = auth(req);
-      const rows = q.placesIn.all(Math.min(s,n), Math.max(s,n), Math.min(w,e), Math.max(w,e));
+      const viewer = await auth(req);
+      const rows = await q.placesIn.all(Math.min(s,n), Math.max(s,n), Math.min(w,e), Math.max(w,e));
       return {
         places: rows.map(p => ({
           id:p.id, source:p.source, cat:p.cat, lat:p.lat, lng:p.lng,
           name:p.name, sub:p.sub, tags:parse(p.tags, {}), createdBy:p.created_by
         })),
-        community: Object.fromEntries(rows.map(p => [p.id, placeBundle(p.id, viewer && viewer.id)]))
+        community: Object.fromEntries(
+          await Promise.all(rows.map(async p => [p.id, await placeBundle(p.id, viewer && viewer.id)])))
       };
     },
 
-    'GET /api/v1/place': (req, body, ip, url) => {
+    'GET /api/v1/place': async (req, body, ip, url) => {
       const id = url.searchParams.get('id');
       if (!id) bad(400, 'id is required');
-      const viewer = auth(req);
-      const p = q.getPlace.get(id);
+      const viewer = await auth(req);
+      const p = await q.getPlace.get(id);
       return {place: p ? {id:p.id, cat:p.cat, lat:p.lat, lng:p.lng, name:p.name, sub:p.sub,
                           tags:parse(p.tags, {}), retired:!!p.retired} : null,
-              community: placeBundle(id, viewer && viewer.id)};
+              community: await placeBundle(id, viewer && viewer.id)};
     },
 
-    'POST /api/v1/place': (req, body) => {
-      const u = need(req);
+    'POST /api/v1/place': async (req, body) => {
+      const u = await need(req);
       if (!rateLimit('place:' + u.id, 30, 3600000)) bad(429, 'That is a lot of new places — try later');
-      const p = ensurePlace(body.place, u.id);
+      const p = await ensurePlace(body.place, u.id);
       return {place:{id:p.id}};
     },
 
-    'POST /api/v1/review': (req, body) => {
-      const u = need(req);
+    'POST /api/v1/review': async (req, body) => {
+      const u = await need(req);
       if (!rateLimit('review:' + u.id, 40, 3600000)) bad(429, 'Too many reviews just now');
-      ensurePlace(body.place, u.id);
+      await ensurePlace(body.place, u.id);
       const stars = Number(body.stars);
       if (!(stars >= 1 && stars <= 5)) bad(400, 'Stars must be 1 to 5');
       const localId = body.localId ? String(body.localId).slice(0, 64) : null;
       /* a device re-uploading after a server reset must not duplicate */
       if (localId){
-        const existing = q.reviewByLocal.get(u.id, localId);
-        if (existing) return {id: existing.id, duplicate: true, community: placeBundle(body.place.id, u.id)};
+        const existing = await q.reviewByLocal.get(u.id, localId);
+        if (existing) return {id: existing.id, duplicate: true, community: await placeBundle(body.place.id, u.id)};
       }
       const id = uid('r');
-      q.insReview.run(id, body.place.id, u.id, Math.round(stars),
+      await q.insReview.run(id, body.place.id, u.id, Math.round(stars),
         String(body.text || '').slice(0, 2000), json(body.tags || []), json(body.sub || null),
         Number(body.at) || now(), localId);
-      return {id, community: placeBundle(body.place.id, u.id)};
+      return {id, community: await placeBundle(body.place.id, u.id)};
     },
 
     /* Photos always arrive pending. The on-device check runs first and blocks
        the obvious cases, but a client can lie, so the server never treats a
        client verdict as permission to publish. A person decides.          */
-    'POST /api/v1/photo': (req, body) => {
-      const u = need(req);
+    'POST /api/v1/photo': async (req, body) => {
+      const u = await need(req);
       if (!rateLimit('photo:' + u.id, 30, 3600000)) bad(429, 'Too many photos just now');
-      ensurePlace(body.place, u.id);
+      await ensurePlace(body.place, u.id);
       const m = String(body.dataUrl || '').match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
       if (!m) bad(400, 'Expected a jpeg, png or webp data URL');
       const bytes = Buffer.from(m[2], 'base64');
       if (bytes.length > MAX_PHOTO_BYTES) bad(413, 'That photo is too large');
       if (body.clientVerdict === 'rejected') bad(400, 'That photo did not pass the safety check');
       const id = uid('ph');
-      q.insPhoto.run(id, body.place.id, body.reviewId || null, u.id, 'pending',
+      await q.insPhoto.run(id, body.place.id, body.reviewId || null, u.id, 'pending',
         json(body.scores || null), body.faces == null ? null : Number(body.faces),
         json(body.reasons || []), m[1], bytes, now());
       return {id, state:'pending'};
     },
 
-    'GET /api/v1/photo': (req, body, ip, url) => {
+    'GET /api/v1/photo': async (req, body, ip, url) => {
       const id = url.searchParams.get('id');
-      const p = id && q.photoById.get(id);
+      const p = id && await q.photoById.get(id);
       if (!p) bad(404, 'No such photo');
-      const viewer = auth(req);
+      const viewer = await auth(req);
       const maySee = p.state === 'approved' || (viewer && viewer.id === p.user_id) || isAdmin(req);
       if (!maySee) bad(403, 'That photo is not published');
       return {__binary:true, mime:p.mime, bytes:p.bytes};
     },
 
-    'POST /api/v1/confirm': (req, body) => {
-      const u = need(req);
+    'POST /api/v1/confirm': async (req, body) => {
+      const u = await need(req);
       if (!rateLimit('confirm:' + u.id, 120, 3600000)) bad(429, 'Slow down a moment');
-      ensurePlace(body.place, u.id);
+      await ensurePlace(body.place, u.id);
       const status = ['open','locked','private','hours','indoor'].includes(body.status) ? body.status : 'open';
-      q.insConfirm.run(uid('c'), body.place.id, u.id, status, now());
-      return {community: placeBundle(body.place.id, u.id)};
+      await q.insConfirm.run(uid('c'), body.place.id, u.id, status, now());
+      return {community: await placeBundle(body.place.id, u.id)};
     },
 
-    'POST /api/v1/report': (req, body) => {
-      const u = need(req);
+    'POST /api/v1/report': async (req, body) => {
+      const u = await need(req);
       if (!rateLimit('report:' + u.id, 60, 3600000)) bad(429, 'Too many reports just now');
       const type = ['place','photo','review'].includes(body.targetType) ? body.targetType : 'place';
-      if (type === 'place') ensurePlace(body.place, u.id);
+      if (type === 'place') await ensurePlace(body.place, u.id);
       const targetId = type === 'place' ? body.place.id : String(body.targetId || '');
       if (!targetId) bad(400, 'What is being reported?');
-      q.insReport.run(uid('rep'), type, targetId, u.id, String(body.kind || 'other').slice(0,40),
+      await q.insReport.run(uid('rep'), type, targetId, u.id, String(body.kind || 'other').slice(0,40),
         String(body.note || '').slice(0, 500), now());
       /* a reported photo comes down at once and goes back to the queue */
       if (type === 'photo'){
-        const ph = q.photoById.get(targetId);
-        if (ph && ph.state === 'approved') q.decide.run('pending', now(), 'reported', targetId);
+        const ph = await q.photoById.get(targetId);
+        if (ph && ph.state === 'approved') await q.decide.run('pending', now(), 'reported', targetId);
       }
       /* two different people saying it is gone retires it for everyone */
       let retired = false;
       if (type === 'place' && ['closed','noexist'].includes(body.kind)){
-        const n = q.distinctReporters.get(targetId).n;
-        if (n >= 2){ q.retire.run(targetId); retired = true; }
+        const n = (await q.distinctReporters.get(targetId)).n;
+        if (n >= 2){ await q.retire.run(targetId); retired = true; }
       }
-      return {ok:true, retired, community: type === 'place' ? placeBundle(targetId, u.id) : undefined};
+      return {ok:true, retired, community: type === 'place' ? await placeBundle(targetId, u.id) : undefined};
     },
 
-    'POST /api/v1/correction': (req, body) => {
-      const u = need(req);
+    'POST /api/v1/correction': async (req, body) => {
+      const u = await need(req);
       if (!rateLimit('corr:' + u.id, 60, 3600000)) bad(429, 'Too many corrections just now');
-      ensurePlace(body.place, u.id);
+      await ensurePlace(body.place, u.id);
       if (!['moved','hours','indoor'].includes(body.kind)) bad(400, 'Unknown correction');
-      q.insCorr.run(uid('cor'), body.place.id, u.id, body.kind, json(body.value), now());
-      q.insConfirm.run(uid('c'), body.place.id, u.id, body.kind, now());
-      return {community: placeBundle(body.place.id, u.id)};
+      await q.insCorr.run(uid('cor'), body.place.id, u.id, body.kind, json(body.value), now());
+      await q.insConfirm.run(uid('c'), body.place.id, u.id, body.kind, now());
+      return {community: await placeBundle(body.place.id, u.id)};
     },
 
-    'POST /api/v1/feedback': (req, body) => {
-      const u = auth(req);
+    'POST /api/v1/feedback': async (req, body) => {
+      const u = await auth(req);
       if (!rateLimit('fb:' + (u ? u.id : 'anon'), 20, 3600000)) bad(429, 'Thanks — that is plenty for now');
       const text = String(body.text || '').trim();
       if (text.length < 3) bad(400, 'Tell us a little more');
-      q.insFeedback.run(uid('fb'), u ? u.id : null, text.slice(0, 4000),
+      await q.insFeedback.run(uid('fb'), u ? u.id : null, text.slice(0, 4000),
         json(body.context || null), now());
       return {ok:true};
     },
@@ -436,11 +450,11 @@ function createAPI({file, adminToken}){
     /* ---- sponsored listings ---------------------------------------------
        Read is public (the app needs it); everything that costs money or
        changes what people see is moderator-only.                        */
-    'GET /api/v1/sponsors': (req, body, ip, url) => {
+    'GET /api/v1/sponsors': async (req, body, ip, url) => {
       const lat = Number(url.searchParams.get('lat')), lng = Number(url.searchParams.get('lng'));
       if (isNaN(lat) || isNaN(lng)) bad(400, 'lat and lng are required');
       const t = now(), pad = 0.05;                       // ~5km box, filtered properly client-side
-      const rows = q.liveSponsors.all(t, t, lat-pad, lat+pad, lng-pad, lng+pad);
+      const rows = await q.liveSponsors.all(t, t, lat-pad, lat+pad, lng-pad, lng+pad);
       return {sponsors: rows.map(s => ({
         id:s.id, placeId:s.place_id, business:s.business, headline:s.headline,
         body:s.body, cta:s.cta, lat:s.lat, lng:s.lng, radius:s.radius}))};
@@ -448,44 +462,44 @@ function createAPI({file, adminToken}){
 
     /* Billing runs off these two. Impressions are cheap and frequent, so
        they are fire-and-forget; a click is the thing worth arguing over. */
-    'POST /api/v1/sponsors/impression': (req, body, ip) => {
-      const s = q.sponsorById.get(String(body.id || ''));
+    'POST /api/v1/sponsors/impression': async (req, body, ip) => {
+      const s = await q.sponsorById.get(String(body.id || ''));
       if (!s || s.status !== 'live') return {ok:false};
       if (!rateLimit('imp:' + ip + ':' + s.id, 60, 3600000)) return {ok:false, throttled:true};
-      q.countImpression.run(s.id);
+      await q.countImpression.run(s.id);
       return {ok:true};
     },
-    'POST /api/v1/sponsors/click': (req, body, ip) => {
-      const s = q.sponsorById.get(String(body.id || ''));
+    'POST /api/v1/sponsors/click': async (req, body, ip) => {
+      const s = await q.sponsorById.get(String(body.id || ''));
       if (!s || s.status !== 'live') return {ok:false};
       if (!rateLimit('clk:' + ip + ':' + s.id, 20, 3600000)) return {ok:false, throttled:true};
-      q.countClick.run(s.id);
+      await q.countClick.run(s.id);
       return {ok:true};
     },
 
     /* A business asking to advertise. No auth — it is a contact form. */
-    'POST /api/v1/lead': (req, body, ip) => {
+    'POST /api/v1/lead': async (req, body, ip) => {
       if (!rateLimit('lead:' + ip, 10, 3600000)) bad(429, 'Too many enquiries from here');
       const business = String(body.business || '').trim().slice(0, 120);
       const contact  = String(body.contact  || '').trim().slice(0, 200);
       if (!business || !contact) bad(400, 'A business name and a way to reach you are both needed');
-      q.insLead.run(uid('lead'), business, contact, String(body.note || '').slice(0, 1000),
+      await q.insLead.run(uid('lead'), business, contact, String(body.note || '').slice(0, 1000),
         body.lat == null ? null : Number(body.lat), body.lng == null ? null : Number(body.lng), now());
       return {ok:true};
     },
 
-    'POST /api/v1/moderation/sponsor': (req, body) => {
+    'POST /api/v1/moderation/sponsor': async (req, body) => {
       needAdmin(req);
       if (body.id && body.status){
         if (!['pending','live','paused','ended'].includes(body.status)) bad(400, 'Unknown status');
-        if (!q.sponsorById.get(body.id)) bad(404, 'No such campaign');
-        q.setSponsorStatus.run(body.status, body.id);
+        if (!await q.sponsorById.get(body.id)) bad(404, 'No such campaign');
+        await q.setSponsorStatus.run(body.status, body.id);
         return {ok:true, id:body.id, status:body.status};
       }
       const required = ['business','headline','lat','lng'];
       for (const k of required) if (body[k] == null || body[k] === '') bad(400, `${k} is required`);
       const id = uid('sp');
-      q.insSponsor.run(id, body.placeId || null, String(body.business).slice(0,120),
+      await q.insSponsor.run(id, body.placeId || null, String(body.business).slice(0,120),
         String(body.headline).slice(0,120), String(body.body || '').slice(0,300),
         String(body.cta || 'Directions').slice(0,40),
         Number(body.lat), Number(body.lng), Number(body.radius) || 1500,
@@ -496,69 +510,70 @@ function createAPI({file, adminToken}){
         body.starts ? Number(body.starts) : null, body.ends ? Number(body.ends) : null, now());
       return {ok:true, id};
     },
-    'GET /api/v1/moderation/revenue': req => {
+    'GET /api/v1/moderation/revenue': async req => {
       needAdmin(req);
-      const r = q.revenue.get();
+      const r = await q.revenue.get();
       return {
         ...r,
         revenue: '$' + (r.revenue_cents/100).toFixed(2),
         ctr: r.impressions ? +(r.clicks / r.impressions * 100).toFixed(2) : 0,
-        campaigns: q.allSponsors.all().map(s => ({
+        campaigns: (await q.allSponsors.all()).map(s => ({
           id:s.id, business:s.business, headline:s.headline, status:s.status,
           impressions:s.impressions, clicks:s.clicks,
           ctr: s.impressions ? +(s.clicks/s.impressions*100).toFixed(2) : 0,
           spent: '$' + (s.spent_cents/100).toFixed(2),
           budget: '$' + (s.budget_cents/100).toFixed(2)})),
-        leads: q.allLeads.all().map(l => ({
+        leads: (await q.allLeads.all()).map(l => ({
           id:l.id, business:l.business, contact:l.contact, note:l.note,
           at:l.created, handled:!!l.handled}))
       };
     },
 
     /* ---- moderator ---- */
-    'GET /api/v1/moderation/queue': req => {
+    'GET /api/v1/moderation/queue': async req => {
       needAdmin(req);
-      return {photos: q.pending.all().map(p => ({
+      return {photos: (await q.pending.all()).map(p => ({
         id:p.id, placeId:p.place_id, placeName:p.place_name, by:p.user_name,
         state:p.state, scores:parse(p.scores, null), faces:p.faces,
         reasons:parse(p.reasons, []), at:p.created}))};
     },
-    'POST /api/v1/moderation/decide': (req, body) => {
+    'POST /api/v1/moderation/decide': async (req, body) => {
       needAdmin(req);
       if (!['approved','rejected'].includes(body.state)) bad(400, 'approved or rejected');
-      const p = q.photoById.get(String(body.id || ''));
+      const p = await q.photoById.get(String(body.id || ''));
       if (!p) bad(404, 'No such photo');
-      q.decide.run(body.state, now(), 'moderator', p.id);
+      await q.decide.run(body.state, now(), 'moderator', p.id);
       return {ok:true, id:p.id, state:body.state};
     },
-    'GET /api/v1/moderation/stats': req => { needAdmin(req); return q.counts.get(); },
+    'GET /api/v1/moderation/stats': async req => { needAdmin(req); return await q.counts.get(); },
 
     /* Blocking an abusive contributor. Their reviews stop being served and
        their photos come down; nothing they post afterwards is accepted. */
-    'POST /api/v1/moderation/block': (req, body) => {
+    'POST /api/v1/moderation/block': async (req, body) => {
       needAdmin(req);
-      const u = q.userById.get(String(body.userId || ''));
+      const u = await q.userById.get(String(body.userId || ''));
       if (!u) bad(404, 'No such user');
       const blocked = body.blocked === false ? 0 : 1;
-      q.blockUser.run(blocked, u.id);
-      if (blocked) q.hidePhotosOf.run(now(), u.id);
+      await q.blockUser.run(blocked, u.id);
+      if (blocked) await q.hidePhotosOf.run(now(), u.id);
       return {ok:true, userId:u.id, name:u.name, blocked: !!blocked};
     },
-    'GET /api/v1/moderation/users': req => {
+    'GET /api/v1/moderation/users': async req => {
       needAdmin(req);
-      return {users: q.recentUsers.all().map(u => ({
+      return {users: (await q.recentUsers.all()).map(u => ({
         id:u.id, name:u.name, blocked:!!u.blocked, at:u.created,
         reviews:u.reviews, photos:u.photos, reportsMade:u.reports_made}))};
     },
-    'GET /api/v1/moderation/feedback': req => {
+    'GET /api/v1/moderation/feedback': async req => {
       needAdmin(req);
-      return {feedback: q.allFeedback.all().map(f => ({
+      return {feedback: (await q.allFeedback.all()).map(f => ({
         id:f.id, by:f.user_name || 'anonymous', text:f.text,
         context:parse(f.context, null), at:f.created, done:!!f.done}))};
     }
   };
 
   async function handle(req, res, url, body, ip){
+    await db.ready;                       /* schema is in place before any query */
     const key = `${req.method} ${url.pathname}`;
     const route = routes[key];
     if (!route) return false;

@@ -5,7 +5,10 @@ services:
     name: bathroom-finder
     runtime: node
     plan: free
-    buildCommand: "echo no build step"
+    # The server itself needs exactly one dependency: the libSQL client that
+    # talks to Turso. --omit=dev skips the Capacitor tooling, which is only
+    # used when building the native apps on a developer machine.
+    buildCommand: "npm ci --omit=dev"
     startCommand: "node serve.js"
     healthCheckPath: /api/v1/health
     envVars:

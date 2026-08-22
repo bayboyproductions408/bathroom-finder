@@ -21,38 +21,38 @@ Live now, free, no card anywhere:
 - Sponsored listings with geofencing, impression/click billing, budget cutoff
 - Privacy, terms and support pages published and linked from Profile
 
-## Data loss: mitigated, not solved
+## Durable storage: code done, one step is yours
 
 Render's free tier wipes the database on every restart — verified, not assumed:
 reviews went from 2 to 0 after one restart.
 
-Each device now keeps a record of what it wrote and puts it back when it finds
-the server has lost it. Re-uploads are idempotent, so this cannot duplicate.
-Verified end to end against the live server: wiped to 0, then restored to 1 on
-next launch without any prompting.
+**The fix is written and tested.** Storage now sits behind `server/db.js` with two
+interchangeable backings: a local file for development, and **Turso** — hosted
+SQLite, free tier, no card — in production. Every query in the backend was
+converted to async so the two cannot drift apart.
 
-**What this does not cover:** a contribution is only restored by the device that
-made it, so it comes back when that person next opens the app — not immediately.
-Photos are not restored at all (too large to keep client-side). If every tester
-uninstalls, the data is gone. It is a safety net, not durability.
+Verified before shipping:
 
-## The one decision that is yours
+- All 45 backend tests pass against the local driver **and** against the real
+  libSQL driver — same tests, both backings, including photo blobs and the
+  duplicate-review guard.
+- A new durability suite writes a review, closes the database, reopens it, and
+  confirms the review, its rating, the device's identity token and the duplicate
+  guard all survived a restart.
+- Migration works on a database created before this change: a real one on disk
+  here, missing the newer `local_id` column, was upgraded on boot without loss.
 
-**Data does not survive a restart.** Render's free tier has no persistent disk,
-so every deploy or sleep-wake wipes the SQLite file. That is fine for trying the
-app; it is not fine the moment a real tester writes a review they expect to last.
+**Your one step:** create a free Turso account and paste two values into Render's
+Environment tab — `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. Step by step in
+`DEPLOY.md`. The token is a credential; it goes into Render and nowhere else.
 
-Three ways out:
+Until those exist the server still runs, still on the wipe-on-restart file, and
+says so on its first line of log output. If the variables are set but wrong it
+refuses to start rather than silently falling back — a quiet fallback would look
+like a clean deploy and lose everything at the next restart.
 
-| Option | Cost | Work |
-|---|---|---|
-| **Turso** — SQLite as a service, free tier, no card | $0 | ~2 hours; the backend is isolated in `server/api.js` |
-| **Render disk** | $7/mo | 5 minutes, a toggle |
-| **Fly.io volume** | free allowance, card on file | ~1 hour |
-
-**Recommendation: Turso.** It keeps the whole thing free and the storage layer is
-already behind one file. Say the word and I will write the adapter; you would only
-need to create the account and paste a connection URL.
+The per-device re-upload safety net stays in place underneath, so a contribution
+survives even a total server loss, as long as the device that wrote it comes back.
 
 Do this **before** inviting testers. Losing the first fifty reviews is the kind of
 thing people do not come back from.
@@ -61,7 +61,7 @@ thing people do not come back from.
 
 ## Remaining before App Store submission
 
-1. **Durable storage** — above.
+1. **Turso variables** — above; a few minutes in two browser tabs.
 2. **Screenshots** — 6.7" (1290×2796) and 6.5" (1242×2688), 3–10 each. Take them on
    the installed app on your iPhone; the phone's own screenshot is exactly right.
    Lead with the map, then a detail page, then the review screen.
