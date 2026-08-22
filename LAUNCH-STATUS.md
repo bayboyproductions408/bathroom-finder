@@ -74,57 +74,56 @@ whenever you like by blocking that user in `/moderate.html`.
 
 ---
 
-## Remaining before App Store submission
+## App Store submission checklist
 
 App Store Connect record: **Bathroom Finder Nearby**, Apple ID `6804091512`.
 
 ### Done
 
-1. ~~**Durable storage**~~ — Turso live, verified against a real restart.
-2. ~~**Screenshots**~~ — 9 captured from the real running app at exact store
-   sizes, in `store/screenshots`. Regenerate any time with
-   `node tools/make-screenshots.js`.
-3. ~~**Age rating**~~ — questionnaire completed, saved. Apple calculated **4+**
-   (172 countries; A12 Brazil, ALL Korea, 00+ Vietnam). Declared: user-generated
-   content **yes**, advertising **yes**, everything else none/no. Worth a second
-   look at one judgement call — *Social Media* was answered **no**, on the basis
-   that reviews attached to places are not a feed that amplifies content to many
-   users. If Apple disagrees the fix is an edit, not a resubmission.
-4. ~~**Privacy policy URL**~~ — set to the published page and saved. All three
-   legal pages return 200.
-5. ~~`APPSTORE_KEY_ID`~~ — added to the repo's Actions secrets.
+| | |
+|---|---|
+| Durable storage | Turso, verified against a real service restart |
+| Screenshots | 9 at exact store sizes, `node tools/make-screenshots.js` regenerates them |
+| Age rating | Completed. Apple calculates **4+** — 172 countries, A12 Brazil, ALL Korea, 00+ Vietnam |
+| Privacy policy URL | Set to the published page; all three legal pages return 200 |
+| App Privacy labels | Completed and **published** to the product page |
+| Content Rights | Declared — the app uses OpenStreetMap and CARTO, both attributed |
+| `APPSTORE_KEY_ID` | In the repo's Actions secrets |
+| `APPSTORE_ISSUER_ID` | In the repo's Actions secrets, with the correct `92a3` |
 
-### Yours — none of these can be done for you
+**Privacy labels as published.** *Data Used to Track You:* Identifiers (Device ID)
+and Usage Data (Advertising Data) — both because of AdMob. *Data Not Linked to
+You:* Name, Coarse Location, Photos or Videos, Customer Support, Other User
+Content, User ID. Purposes are App Functionality throughout, except Coarse
+Location, Device ID and Advertising Data, which are Third-Party Advertising.
 
-6. **Two GitHub secrets.** Settings → Secrets and variables → Actions →
-   *New repository secret*:
+### Three things that turned out not to be blockers
 
-   | Name | Value |
-   |---|---|
-   | `APPSTORE_ISSUER_ID` | `3312781e-d649-4d7f-92a3-d19bb9151ec0` |
-   | `APPSTORE_PRIVATE_KEY` | whole contents of `AuthKey_399645T965.p8`, BEGIN/END lines included |
+- **EU trader status** is already **Active** for 27 countries. The Digital
+  Services Act banner on the Apps list is boilerplate Apple shows every
+  developer, not an outstanding action on this account.
+- **AdMob verification** is not pending. It reads: *"You may need to verify some
+  personal information once your earnings reach the verification threshold."*
+  There is nothing to verify until money is actually owed. The payments account
+  (AdSense, United States) exists and shows no warnings.
+- **Agreements, bank account and W-9** are all active already.
 
-   **Note the issuer ID carefully: `92a3`.** The value carried in the project
-   notes had `92e3`, the identical one-character error that cost ten debug
-   rounds on Flappy Birdies. This one is read straight off App Store Connect.
-   The `.p8` is a private key, so it is yours to paste and no one else's.
+### The one human step left
 
-7. **App Privacy nutrition labels.** App Privacy → *Get Started*. Answers are
-   written out in `STORE.md` under "Apple — Privacy Nutrition Labels" — the
-   short version is User Content, Identifiers and Name, all *Not Linked to You*,
-   and **Identifiers used for tracking = yes** because of AdMob. That dialog
-   would not open under automation; it takes about five minutes by hand.
+**`APPSTORE_PRIVATE_KEY`** — the `.p8` App Store Connect key, at
+`C:\Dom\Claude\dev-tools\ios-signing\flappy-birdies\AuthKey_399645T965.p8`.
+Same Apple team as Flappy Birdies, so the same key works here.
 
-8. **EU trader status.** App Store Connect is showing a Digital Services Act
-   banner: trader status must be provided or apps are removed from the EU store.
-   It wants your name, address and phone, so it has to be you.
+Put it on the clipboard without it ever appearing on screen:
 
-9. **Content Rights** — App Information → Content Rights is still unset. It asks
-   whether the app contains third-party content. It does: OpenStreetMap and
-   CARTO, both attributed in-app and both appropriately licensed.
+    Get-Content "C:\Dom\Claude\dev-tools\ios-signing\flappy-birdies\AuthKey_399645T965.p8" | Set-Clipboard
 
-10. **AdMob payment details.** Still the gate on any ad revenue actually paying
-    out. Payment and tax details are not something I will ever enter for you.
+then paste into the repo's *New repository secret* form, named exactly
+`APPSTORE_PRIVATE_KEY`. A signing key is the one credential that should pass
+from your file to GitHub and touch nothing in between.
+
+After that, run the **iOS TestFlight** workflow from the Actions tab and add
+`dfh1012@hotmail.com` as an internal tester in App Store Connect.
 
 ## Revenue, honestly
 
