@@ -138,7 +138,8 @@ jobs:
           echo "has END        : $(grep -c 'END PRIVATE KEY' ~/private_keys/AuthKey_${KEY_ID}.p8 || true)"
           echo "carriage rets  : $(printf '%s' "$KEY" | tr -cd '\r' | wc -c | tr -d ' ')"
           echo "openssl says   : $(openssl pkey -in ~/private_keys/AuthKey_${KEY_ID}.p8 -noout 2>&1 | head -1 || true)"
-          echo "expected: 257 raw bytes, sha256 77f44cbe0f2e3c68, 6 lines"
+          echo "a .p8 is normally 257 bytes over 6 lines; the rebuild above"
+          echo "restores the header and footer if the paste dropped them"
           echo "--------------------------------------"
 
           # Structural check only. Note openssl happily parses a CRLF key, so
