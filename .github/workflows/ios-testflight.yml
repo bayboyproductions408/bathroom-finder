@@ -59,8 +59,11 @@ jobs:
         # @capacitor-community/admob 6.2 was written against the User Messaging
         # Platform 2.x API. UMP 3.0 renamed the whole surface — UMPConsentStatus
         # to ConsentStatus and so on — so an unpinned `pod install` picks up 3.x
-        # and the plugin no longer compiles. Pin both Google pods to the
-        # generation the plugin expects.
+        # and the plugin no longer compiles.
+        #
+        # Only UMP is pinned. The plugin already pins Google-Mobile-Ads-SDK to
+        # exactly 11.3.0, and a second constraint on it makes CocoaPods refuse
+        # to resolve at all.
         run: |
           cd ios/App
           node -e "
@@ -68,10 +71,9 @@ jobs:
             let p = fs.readFileSync('Podfile', 'utf8');
             if (!p.includes('GoogleUserMessagingPlatform')) {
               p = p.replace(/(target 'App' do\n)/,
-                \"\$1  pod 'GoogleUserMessagingPlatform', '~> 2.7'\n\" +
-                \"  pod 'Google-Mobile-Ads-SDK', '~> 11.13'\n\");
+                \"\$1  pod 'GoogleUserMessagingPlatform', '~> 2.7'\n\");
               fs.writeFileSync('Podfile', p);
-              console.log('pinned UMP 2.7 / GMA 11.13');
+              console.log('pinned UMP 2.7');
             } else {
               console.log('already pinned');
             }
