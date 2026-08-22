@@ -52,33 +52,25 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Drop the native AdMob plugin
+        # @capacitor-community/admob 6.2 does not build against current pods.
+        # It pins Google-Mobile-Ads-SDK to exactly 11.3.0, which pulls User
+        # Messaging Platform 3.x, whose API it was not written for — every UMP
+        # symbol it uses was renamed in 3.0. Pinning UMP back to 2.7 is refused
+        # because the 2.x podspecs need a different deployment target. It is
+        # broken upstream, not here.
+        #
+        # Removing it costs nothing right now: AdMob serves no ads until the app
+        # is published and the AdMob account is reviewed, so a TestFlight build
+        # would show none either way. admob.js already returns null when the
+        # plugin is absent and the app falls back to its own sponsored-listing
+        # slot, which is the revenue line that actually earns.
+        #
+        # Restore this when the plugin supports UMP 3.
+        run: npm remove @capacitor-community/admob --no-save || true
+
       - name: Generate the iOS project
         run: npx cap add ios || echo "ios/ already exists"
-
-      - name: Pin Google's ad SDKs to what the Capacitor plugin compiles against
-        # @capacitor-community/admob 6.2 was written against the User Messaging
-        # Platform 2.x API. UMP 3.0 renamed the whole surface — UMPConsentStatus
-        # to ConsentStatus and so on — so an unpinned `pod install` picks up 3.x
-        # and the plugin no longer compiles.
-        #
-        # Only UMP is pinned. The plugin already pins Google-Mobile-Ads-SDK to
-        # exactly 11.3.0, and a second constraint on it makes CocoaPods refuse
-        # to resolve at all.
-        run: |
-          cd ios/App
-          node -e "
-            const fs = require('fs');
-            let p = fs.readFileSync('Podfile', 'utf8');
-            if (!p.includes('GoogleUserMessagingPlatform')) {
-              p = p.replace(/(target 'App' do\n)/,
-                \"\$1  pod 'GoogleUserMessagingPlatform', '~> 2.7'\n\");
-              fs.writeFileSync('Podfile', p);
-              console.log('pinned UMP 2.7');
-            } else {
-              console.log('already pinned');
-            }
-          "
-          sed -n '1,25p' Podfile
 
       - name: Patch Info.plist, the icon, and the backend URL
         env:
