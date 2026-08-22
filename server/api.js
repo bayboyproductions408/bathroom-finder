@@ -37,11 +37,17 @@ function open(file){
       retired INTEGER NOT NULL DEFAULT 0);
     CREATE INDEX IF NOT EXISTS places_bbox ON places(lat, lng);
 
+    /* local_id is the client's own id for a review it wrote. The free hosting
+       tier has no persistent disk, so the database can be wiped by a restart;
+       devices re-upload what they wrote and this makes that idempotent. */
     CREATE TABLE IF NOT EXISTS reviews(
       id TEXT PRIMARY KEY, place_id TEXT NOT NULL, user_id TEXT NOT NULL,
       stars INTEGER NOT NULL, text TEXT, tags TEXT, sub TEXT,
-      hidden INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL);
+      hidden INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL,
+      local_id TEXT);
     CREATE INDEX IF NOT EXISTS reviews_place ON reviews(place_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS reviews_local ON reviews(user_id, local_id)
+      WHERE local_id IS NOT NULL;
 
     CREATE TABLE IF NOT EXISTS photos(
       id TEXT PRIMARY KEY, place_id TEXT NOT NULL, review_id TEXT,
@@ -92,6 +98,9 @@ function open(file){
       note TEXT, lat REAL, lng REAL, created INTEGER NOT NULL,
       handled INTEGER NOT NULL DEFAULT 0);
   `);
+  /* existing deployments predate local_id; add it without losing data */
+  try { db.exec('ALTER TABLE reviews ADD COLUMN local_id TEXT'); } catch(e){ /* already there */ }
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS reviews_local ON reviews(user_id, local_id) WHERE local_id IS NOT NULL'); } catch(e){}
   return db;
 }
 
@@ -130,7 +139,17 @@ function createAPI({file, adminToken}){
                              ON CONFLICT(id) DO UPDATE SET name=excluded.name, cat=excluded.cat, tags=excluded.tags`),
     getPlace:    db.prepare('SELECT * FROM places WHERE id = ?'),
     placesIn:    db.prepare(`SELECT * FROM places WHERE retired = 0 AND lat BETWEEN ? AND ? AND lng BETWEEN ? AND ? LIMIT 500`),
-    insReview:   db.prepare('INSERT INTO reviews(id, place_id, user_id, stars, text, tags, sub, created) VALUES (?,?,?,?,?,?,?,?)'),
+    /* ON CONFLICT DO NOTHING makes a re-upload harmless: a device that
+       re-sends what it wrote after a server wipe cannot create duplicates. */
+    /* The unique index is partial (local_id IS NOT NULL) so that reviews
+       without one never collide with each other. SQLite requires a partial
+       index's WHERE clause repeated here for it to be a valid conflict
+       target — without it: "ON CONFLICT clause does not match any PRIMARY
+       KEY or UNIQUE constraint". */
+    insReview:   db.prepare(`INSERT INTO reviews(id, place_id, user_id, stars, text, tags, sub, created, local_id)
+                             VALUES (?,?,?,?,?,?,?,?,?)
+                             ON CONFLICT(user_id, local_id) WHERE local_id IS NOT NULL DO NOTHING`),
+    reviewByLocal: db.prepare('SELECT id FROM reviews WHERE user_id = ? AND local_id = ?'),
     /* a blocked user's contributions disappear from everyone else's view —
        required by App Store guideline 1.2 for user-generated content */
     reviewsFor:  db.prepare(`SELECT r.*, u.name AS user_name FROM reviews r JOIN users u ON u.id = r.user_id
@@ -250,7 +269,8 @@ function createAPI({file, adminToken}){
     return {
       id,
       reviews: q.reviewsFor.all(id).map(r => ({
-        id:r.id, user:r.user_name, stars:r.stars, text:r.text,
+        id:r.id, localId:r.local_id, mine: viewerId ? r.user_id === viewerId : false,
+        user:r.user_name, stars:r.stars, text:r.text,
         tags:parse(r.tags, []), sub:parse(r.sub, null), at:r.created,
         photos: [] })),
       stats: {count: stats.n || 0, rating: stats.avg ? Math.round(stats.avg*10)/10 : null},
@@ -319,9 +339,16 @@ function createAPI({file, adminToken}){
       ensurePlace(body.place, u.id);
       const stars = Number(body.stars);
       if (!(stars >= 1 && stars <= 5)) bad(400, 'Stars must be 1 to 5');
+      const localId = body.localId ? String(body.localId).slice(0, 64) : null;
+      /* a device re-uploading after a server reset must not duplicate */
+      if (localId){
+        const existing = q.reviewByLocal.get(u.id, localId);
+        if (existing) return {id: existing.id, duplicate: true, community: placeBundle(body.place.id, u.id)};
+      }
       const id = uid('r');
       q.insReview.run(id, body.place.id, u.id, Math.round(stars),
-        String(body.text || '').slice(0, 2000), json(body.tags || []), json(body.sub || null), now());
+        String(body.text || '').slice(0, 2000), json(body.tags || []), json(body.sub || null),
+        Number(body.at) || now(), localId);
       return {id, community: placeBundle(body.place.id, u.id)};
     },
 

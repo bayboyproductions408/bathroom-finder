@@ -349,3 +349,52 @@ test('the revenue dashboard reports what matters', async () => {
   for (const k of ['live_campaigns','revenue_cents','impressions','clicks','open_leads','ctr'])
     assert.ok(k in r.body, `dashboard is missing ${k}`);
 });
+
+/* ---------- surviving a server wipe ----------
+   The free tier has no persistent disk, so devices re-upload what they wrote.
+   That is only safe if repeats are idempotent. */
+test('a re-uploaded review does not duplicate', async () => {
+  const place = {...PLACE, id:'osm:node/900', name:'Wipe Test'};
+  const body = {place, stars:4, text:'Survives a restart', localId:'lr_abc123'};
+
+  const first = await call('POST', '/api/v1/review', {body, token:alice.token});
+  assert.strictEqual(first.status, 200);
+
+  const again = await call('POST', '/api/v1/review', {body, token:alice.token});
+  assert.strictEqual(again.status, 200);
+  assert.strictEqual(again.body.duplicate, true, 'the second upload must be recognised');
+
+  const seen = await call('GET', '/api/v1/place', {query:'?id=' + encodeURIComponent(place.id)});
+  assert.strictEqual(seen.body.community.reviews.length, 1, 'one review, not two');
+  assert.strictEqual(seen.body.community.stats.count, 1);
+});
+
+test('the same localId from a different person is still their own review', async () => {
+  const place = {...PLACE, id:'osm:node/901', name:'Collision Test'};
+  await call('POST', '/api/v1/review', {body:{place, stars:5, text:'mine', localId:'lr_same'}, token:alice.token});
+  await call('POST', '/api/v1/review', {body:{place, stars:1, text:'also mine', localId:'lr_same'}, token:bob.token});
+  const seen = await call('GET', '/api/v1/place', {query:'?id=' + encodeURIComponent(place.id)});
+  assert.strictEqual(seen.body.community.reviews.length, 2,
+    'localId is only unique per person, so two people may pick the same one');
+});
+
+test('the client is told which reviews are its own', async () => {
+  const place = {...PLACE, id:'osm:node/902', name:'Ownership Test'};
+  await call('POST', '/api/v1/review', {body:{place, stars:3, text:'x', localId:'lr_own'}, token:alice.token});
+  const asAlice = await call('GET', '/api/v1/place', {query:'?id=' + encodeURIComponent(place.id), token:alice.token});
+  const asBob = await call('GET', '/api/v1/place', {query:'?id=' + encodeURIComponent(place.id), token:bob.token});
+  assert.strictEqual(asAlice.body.community.reviews[0].mine, true);
+  assert.strictEqual(asBob.body.community.reviews[0].mine, false);
+  assert.strictEqual(asAlice.body.community.reviews[0].localId, 'lr_own');
+});
+
+test('a review without a localId still works (older clients)', async () => {
+  const place = {...PLACE, id:'osm:node/903', name:'Legacy Test'};
+  const r1 = await call('POST', '/api/v1/review', {body:{place, stars:4, text:'no local id'}, token:alice.token});
+  const r2 = await call('POST', '/api/v1/review', {body:{place, stars:2, text:'also none'}, token:alice.token});
+  assert.strictEqual(r1.status, 200);
+  assert.strictEqual(r2.status, 200);
+  const seen = await call('GET', '/api/v1/place', {query:'?id=' + encodeURIComponent(place.id)});
+  assert.strictEqual(seen.body.community.reviews.length, 2,
+    'null localId must not collide with another null');
+});

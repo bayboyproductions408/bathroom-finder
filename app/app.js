@@ -89,7 +89,7 @@ function starsHTML(v, size){
 }
 
 /* ---------- store ---------- */
-const DEFAULT_STORE = {community:{}, saved:[], local:[], hosts:[], requests:[], bookings:[], photos:{},
+const DEFAULT_STORE = {community:{}, saved:[], local:[], hosts:[], requests:[], bookings:[], photos:{}, mine:[],
                        profile:{name:'You', handle:'@you', payMethod:'sim_visa'}, seeded:false, theme:null};
 let store = structuredClone(DEFAULT_STORE);
 try { const raw = localStorage.getItem('bf.v2'); if (raw) store = Object.assign(structuredClone(DEFAULT_STORE), JSON.parse(raw)); } catch(e){}
@@ -263,7 +263,7 @@ function mergeCommunity(id, bundle){
   if (!bundle) return;
   const c = community(id);
   c.reviews = (bundle.reviews || []).map(r => ({
-    user:r.user, stars:r.stars, text:r.text, tags:r.tags || [], sub:r.sub,
+    user:r.user, localId:r.localId, stars:r.stars, text:r.text, tags:r.tags || [], sub:r.sub,
     at:r.at, photos:[], remote:true
   }));
   c.confirms = (bundle.confirms || []).slice().reverse();
@@ -293,9 +293,45 @@ function afterPush(res){
   if (state.panel === 'detail' && state.sel) renderDetail(state.sel, true);
   renderList(); renderMarkers(); updateSyncBadge();
 }
+/* Everything this device wrote, kept so it can be restored if the server
+   loses it. The free hosting tier has no persistent disk, so a restart wipes
+   the database — without this, a tester's contributions vanish for good. */
+function rememberMine(entry){
+  store.mine = store.mine || [];
+  if (!store.mine.some(m => m.localId === entry.localId)) store.mine.push(entry);
+  if (store.mine.length > 500) store.mine = store.mine.slice(-500);
+  save();
+}
+async function restoreMine(){
+  if (!Sync.online || !(store.mine || []).length) return 0;
+  let restored = 0;
+  for (const m of store.mine){
+    const c = store.community[m.placeId];
+    const onServer = c && (c.reviews || []).some(r => r.localId === m.localId);
+    if (onServer) continue;
+    /* only try for places currently loaded, so this cannot become a
+       thundering herd on every launch */
+    const f = findFeature(m.placeId);
+    if (!f) continue;
+    try {
+      const res = await Sync.review({place:placePayload(f), stars:m.stars, text:m.text,
+        tags:m.tags, sub:m.sub, localId:m.localId, at:m.at, userName:store.profile.name});
+      if (res && !res.queued && !res.duplicate) restored++;
+    } catch(err){ /* leave it for next time */ }
+  }
+  if (restored){
+    save();
+    toast(`Restored ${restored} of your contribution${restored===1?'':'s'}`, I.check);
+  }
+  return restored;
+}
+
 async function pushReview(f, stars, text, tags, sub, photoIds){
+  const localId = 'lr_' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+  rememberMine({localId, placeId:f.id, stars, text, tags, sub, at:Date.now()});
   try {
-    const res = await Sync.review({place:placePayload(f), stars, text, tags, sub, userName:store.profile.name});
+    const res = await Sync.review({place:placePayload(f), stars, text, tags, sub,
+                                   localId, userName:store.profile.name});
     afterPush(res);
     /* photos ride along after the review, each one still pending until a
        moderator clears it — the server never trusts the device verdict */
@@ -328,6 +364,7 @@ async function pullShared(){
     for (const [id, bundle] of Object.entries(data.community || {})) mergeCommunity(id, bundle);
     save(); renderMarkers(); renderList();
     if (state.panel === 'detail' && state.sel) renderDetail(state.sel, true);
+    restoreMine();
   } catch(err){ console.warn('sync pull failed', err); }
 }
 
