@@ -86,6 +86,21 @@ jobs:
           printf '%s\n' "$KEY" | tr -d '\r' > ~/private_keys/AuthKey_${KEY_ID}.p8
           chmod 600 ~/private_keys/AuthKey_${KEY_ID}.p8
 
+          # TEMPORARY diagnostic. Prints the shape of the secret and a
+          # truncated hash so it can be compared against the file on disk —
+          # never any key material. Remove once the upload is working.
+          echo "--- secret shape (no key material) ---"
+          echo "raw bytes      : $(printf '%s' "$KEY" | wc -c | tr -d ' ')"
+          echo "raw sha256[16] : $(printf '%s' "$KEY" | shasum -a 256 | cut -c1-16)"
+          echo "written bytes  : $(wc -c < ~/private_keys/AuthKey_${KEY_ID}.p8 | tr -d ' ')"
+          echo "written lines  : $(wc -l < ~/private_keys/AuthKey_${KEY_ID}.p8 | tr -d ' ')"
+          echo "has BEGIN      : $(grep -c 'BEGIN PRIVATE KEY' ~/private_keys/AuthKey_${KEY_ID}.p8 || true)"
+          echo "has END        : $(grep -c 'END PRIVATE KEY' ~/private_keys/AuthKey_${KEY_ID}.p8 || true)"
+          echo "carriage rets  : $(printf '%s' "$KEY" | tr -cd '\r' | wc -c | tr -d ' ')"
+          echo "openssl says   : $(openssl pkey -in ~/private_keys/AuthKey_${KEY_ID}.p8 -noout 2>&1 | head -1 || true)"
+          echo "expected: 257 raw bytes, sha256 77f44cbe0f2e3c68, 6 lines"
+          echo "--------------------------------------"
+
           # Structural check only. Note openssl happily parses a CRLF key, so
           # this would NOT have caught the failure above — the tr is the fix,
           # this just turns a truncated or half-pasted key into a clear error
