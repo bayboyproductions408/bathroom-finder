@@ -78,8 +78,26 @@ jobs:
           KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
         run: |
           mkdir -p ~/private_keys
-          echo "$KEY" > ~/private_keys/AuthKey_${KEY_ID}.p8
+          # A .p8 pasted from a Windows clipboard arrives with CRLF endings.
+          # The carriage returns survive into the file and CryptoKit rejects it
+          # with "invalidPEMDocument", which reads like a bad or wrong key when
+          # the key is perfectly good and only the whitespace is wrong. Strip
+          # them rather than making the next person diagnose it.
+          printf '%s\n' "$KEY" | tr -d '\r' > ~/private_keys/AuthKey_${KEY_ID}.p8
           chmod 600 ~/private_keys/AuthKey_${KEY_ID}.p8
+
+          # Structural check only. Note openssl happily parses a CRLF key, so
+          # this would NOT have caught the failure above — the tr is the fix,
+          # this just turns a truncated or half-pasted key into a clear error
+          # instead of a confusing one from xcodebuild.
+          if ! grep -q 'BEGIN PRIVATE KEY' ~/private_keys/AuthKey_${KEY_ID}.p8 \
+             || ! openssl pkey -in ~/private_keys/AuthKey_${KEY_ID}.p8 -noout 2>/dev/null; then
+            echo "::error::APPSTORE_PRIVATE_KEY is not a valid PEM private key."
+            echo "Copy the .p8 exactly as it is on disk, including the"
+            echo "-----BEGIN PRIVATE KEY----- and -----END PRIVATE KEY----- lines."
+            exit 1
+          fi
+          echo "API key parsed OK"
 
       - name: Archive
         env:
