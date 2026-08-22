@@ -2186,7 +2186,10 @@ function offerUpdate(worker){
   t.querySelector('button').addEventListener('click', () => { worker.postMessage('skipWaiting'); t.remove(); });
   el('toasts').appendChild(t);
 }
+/* remember a dismissal so the prompt does not follow people around */
+const installDismissed = () => { try { return localStorage.getItem('bf.install.no') === '1'; } catch(e){ return false; } };
 window.addEventListener('beforeinstallprompt', e => {
+  if (installDismissed()) return;
   e.preventDefault();
   deferredInstall = e;
   const b = el('btn-install');

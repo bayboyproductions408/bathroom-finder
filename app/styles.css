@@ -482,3 +482,9 @@ textarea.input{height:auto; padding:12px 13px; min-height:92px; resize:vertical;
    install prompt, sync badge, saved count) shipped permanently visible
    because of this. Author-level rule so hidden always means hidden. */
 [hidden]{display:none !important}
+
+/* The install prompt floats over the map, which is fine — but when the list
+   is expanded it sat on top of a result. Hide it whenever the sheet is up or
+   a panel is open, so it can never cover something you are reading. */
+.app:has(.sheet[data-state="full"]) .install-btn,
+.app:has(.panel[data-open="true"]) .install-btn{display:none !important}
