@@ -76,17 +76,55 @@ whenever you like by blocking that user in `/moderate.html`.
 
 ## Remaining before App Store submission
 
-1. ~~**Durable storage**~~ — done, verified in production against a real restart.
-2. **Screenshots** — 6.7" (1290×2796) and 6.5" (1242×2688), 3–10 each. Take them on
-   the installed app on your iPhone; the phone's own screenshot is exactly right.
-   Lead with the map, then a detail page, then the review screen.
-3. **Rename** if you want — the store record is "Bathroom Finder Nearby" because the
-   plain name was taken. Changeable until first submission.
-4. **Data safety + age rating** — answers written out in `STORE.md`; they need typing
-   into App Store Connect.
-5. **TestFlight** — add the three secrets and run the workflow. See `IOS-TESTFLIGHT.md`.
-6. **Guideline 4.2** — the build must use native location/camera, which Capacitor does.
-   Review notes are drafted in `STORE.md`.
+App Store Connect record: **Bathroom Finder Nearby**, Apple ID `6804091512`.
+
+### Done
+
+1. ~~**Durable storage**~~ — Turso live, verified against a real restart.
+2. ~~**Screenshots**~~ — 9 captured from the real running app at exact store
+   sizes, in `store/screenshots`. Regenerate any time with
+   `node tools/make-screenshots.js`.
+3. ~~**Age rating**~~ — questionnaire completed, saved. Apple calculated **4+**
+   (172 countries; A12 Brazil, ALL Korea, 00+ Vietnam). Declared: user-generated
+   content **yes**, advertising **yes**, everything else none/no. Worth a second
+   look at one judgement call — *Social Media* was answered **no**, on the basis
+   that reviews attached to places are not a feed that amplifies content to many
+   users. If Apple disagrees the fix is an edit, not a resubmission.
+4. ~~**Privacy policy URL**~~ — set to the published page and saved. All three
+   legal pages return 200.
+5. ~~`APPSTORE_KEY_ID`~~ — added to the repo's Actions secrets.
+
+### Yours — none of these can be done for you
+
+6. **Two GitHub secrets.** Settings → Secrets and variables → Actions →
+   *New repository secret*:
+
+   | Name | Value |
+   |---|---|
+   | `APPSTORE_ISSUER_ID` | `3312781e-d649-4d7f-92a3-d19bb9151ec0` |
+   | `APPSTORE_PRIVATE_KEY` | whole contents of `AuthKey_399645T965.p8`, BEGIN/END lines included |
+
+   **Note the issuer ID carefully: `92a3`.** The value carried in the project
+   notes had `92e3`, the identical one-character error that cost ten debug
+   rounds on Flappy Birdies. This one is read straight off App Store Connect.
+   The `.p8` is a private key, so it is yours to paste and no one else's.
+
+7. **App Privacy nutrition labels.** App Privacy → *Get Started*. Answers are
+   written out in `STORE.md` under "Apple — Privacy Nutrition Labels" — the
+   short version is User Content, Identifiers and Name, all *Not Linked to You*,
+   and **Identifiers used for tracking = yes** because of AdMob. That dialog
+   would not open under automation; it takes about five minutes by hand.
+
+8. **EU trader status.** App Store Connect is showing a Digital Services Act
+   banner: trader status must be provided or apps are removed from the EU store.
+   It wants your name, address and phone, so it has to be you.
+
+9. **Content Rights** — App Information → Content Rights is still unset. It asks
+   whether the app contains third-party content. It does: OpenStreetMap and
+   CARTO, both attributed in-app and both appropriately licensed.
+
+10. **AdMob payment details.** Still the gate on any ad revenue actually paying
+    out. Payment and tax details are not something I will ever enter for you.
 
 ## Revenue, honestly
 
