@@ -86,14 +86,30 @@ environment variable*, twice:
 
 Save. Render redeploys on its own.
 
-**4. Confirm it took.** The deploy log's first line says which storage it picked:
+**4. Confirm it took.** Open this in any browser — no login, no log reading:
 
-```
-storage: turso (durable)
+https://bathroom-finder.onrender.com/api/v1/health
+
+Before:
+
+```json
+{"ok":true,"storage":"local","durable":false,"tursoReady":true}
 ```
 
-If it instead says `local file (WIPED ON RESTART …)`, the variables did not
-arrive — check the spelling of the key names.
+After:
+
+```json
+{"ok":true,"storage":"turso","durable":true,"tursoReady":true}
+```
+
+`durable: true` is the whole goal. If it still says `local` a few minutes after
+saving, the variables did not arrive — check the spelling of the key names.
+
+`tursoReady` is a pre-flight: it says the libSQL client is installed on the
+server, so switching Turso on will work. It already reads `true` in production
+(checked). If it ever reads `false`, do **not** set the variables yet — the
+service would refuse to start. That means the host skipped `npm ci`, and the
+fix is the build command, not the database.
 
 The token is a credential: paste it straight into Render and nowhere else. It
 does not belong in the repository, and I have not asked you to show it to me.

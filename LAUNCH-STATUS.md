@@ -46,6 +46,12 @@ Verified before shipping:
 Environment tab — `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. Step by step in
 `DEPLOY.md`. The token is a credential; it goes into Render and nowhere else.
 
+Check it worked by opening
+[/api/v1/health](https://bathroom-finder.onrender.com/api/v1/health) — it should
+flip from `"durable":false` to `"durable":true`. It already reports
+`"tursoReady":true`, meaning the server has what it needs and switching over
+will work rather than fail.
+
 Until those exist the server still runs, still on the wipe-on-restart file, and
 says so on its first line of log output. If the variables are set but wrong it
 refuses to start rather than silently falling back — a quiet fallback would look
