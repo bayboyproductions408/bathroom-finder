@@ -30,6 +30,13 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 40
 
+    env:
+      # Apple Team ID. Not a secret — it ships inside every signed binary.
+      # Read off the App Store Connect API (bundleIds -> attributes.seedId)
+      # rather than transcribed from a portal, because a wrong character here
+      # surfaces as a signing error that reads like a certificate problem.
+      TEAM_ID: 87836YN962
+
     steps:
       - uses: actions/checkout@v4
 
@@ -144,6 +151,8 @@ jobs:
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/App.xcarchive" \
             -allowProvisioningUpdates \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
             -authenticationKeyPath ~/private_keys/AuthKey_${KEY_ID}.p8 \
             -authenticationKeyID "$KEY_ID" \
             -authenticationKeyIssuerID "$ISSUER" \
@@ -160,6 +169,7 @@ jobs:
           <plist version="1.0">
           <dict>
             <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>${TEAM_ID}</string>
             <key>destination</key><string>upload</string>
             <key>uploadSymbols</key><true/>
             <key>manageAppVersionAndBuildNumber</key><false/>
