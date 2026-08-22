@@ -473,3 +473,10 @@ textarea.input{height:auto; padding:12px 13px; min-height:92px; resize:vertical;
 .adbody p{margin:5px 0 0; font-size:12.5px; line-height:1.5; color:var(--ink-2)}
 .addist{display:block; margin-top:6px; font-size:11.5px; color:var(--ink-3); font-weight:600}
 .adcta{align-self:flex-start}
+
+/* The hidden attribute only sets display:none in the UA stylesheet, so any
+   explicit display in the rules above silently wins and the element stays on
+   screen. Several overlays (offline banner, drop-pin bar, "Search this area",
+   install prompt, sync badge, saved count) shipped permanently visible
+   because of this. Author-level rule so hidden always means hidden. */
+[hidden]{display:none !important}
