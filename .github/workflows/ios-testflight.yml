@@ -84,6 +84,22 @@ jobs:
           # the key is perfectly good and only the whitespace is wrong. Strip
           # them rather than making the next person diagnose it.
           printf '%s\n' "$KEY" | tr -d '\r' > ~/private_keys/AuthKey_${KEY_ID}.p8
+
+          # A .p8 pasted without its "-----BEGIN PRIVATE KEY-----" and
+          # "-----END PRIVATE KEY-----" lines is the single most common way this
+          # secret goes wrong: the body is perfectly good base64 and every error
+          # downstream just says the key is invalid. Rebuild the armour rather
+          # than sending someone back to re-copy it.
+          if ! grep -q 'BEGIN PRIVATE KEY' ~/private_keys/AuthKey_${KEY_ID}.p8; then
+            echo "note: secret has no PEM header — rebuilding it around the body"
+            {
+              echo "-----BEGIN PRIVATE KEY-----"
+              tr -d ' \t\r\n' < ~/private_keys/AuthKey_${KEY_ID}.p8 | fold -w 64
+              echo
+              echo "-----END PRIVATE KEY-----"
+            } > ~/private_keys/rebuilt.p8
+            mv ~/private_keys/rebuilt.p8 ~/private_keys/AuthKey_${KEY_ID}.p8
+          fi
           chmod 600 ~/private_keys/AuthKey_${KEY_ID}.p8
 
           # TEMPORARY diagnostic. Prints the shape of the secret and a
