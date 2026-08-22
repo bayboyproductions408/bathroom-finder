@@ -22,6 +22,7 @@
     "@capacitor/android": "^6.2.0",
     "@capacitor/geolocation": "^6.1.0",
     "@capacitor/camera": "^6.1.0",
-    "@capacitor/splash-screen": "^6.0.3"
+    "@capacitor/splash-screen": "^6.0.3",
+    "@capacitor-community/admob": "^6.2.0"
   }
 }

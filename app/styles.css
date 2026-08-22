@@ -488,3 +488,11 @@ textarea.input{height:auto; padding:12px 13px; min-height:92px; resize:vertical;
    a panel is open, so it can never cover something you are reading. */
 .app:has(.sheet[data-state="full"]) .install-btn,
 .app:has(.panel[data-open="true"]) .install-btn{display:none !important}
+
+/* Native AdMob banner sits under the app, so lift the tab bar by exactly the
+   banner's reported height. Never guess this — an anchored banner that
+   overlaps the tab bar makes the app feel broken and gets accidental taps,
+   which AdMob treats as invalid traffic. */
+:root{--banner-height:0px}
+html.has-banner .tabbar{padding-bottom:calc(10px + var(--banner-height) + env(safe-area-inset-bottom))}
+html.has-banner .toasts{bottom:calc(88px + var(--banner-height) + env(safe-area-inset-bottom))}

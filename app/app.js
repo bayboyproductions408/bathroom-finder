@@ -1662,7 +1662,8 @@ function openPlus(){
   const on = el('plus-on'), off = el('plus-off');
   if (on) on.addEventListener('click', () => {
     try { localStorage.setItem('bf.plus','1'); } catch(e){}
-    state.currentAd = null; closeModal(); renderList(); renderProfile();
+    state.currentAd = null; if (typeof AdMobNative !== 'undefined') AdMobNative.hideBanner();
+    closeModal(); renderList(); renderProfile();
     toast('Plus is on — no more ads', I.sparkle);
   });
   if (off) off.addEventListener('click', () => {
@@ -2126,6 +2127,7 @@ function boot(){
 
   registerWorker();
   startSync();
+  if (typeof AdMobNative !== 'undefined') AdMobNative.start();
   refreshSponsors().then(() => renderList());
   map.on('moveend', () => { clearTimeout(sponsorTimer); sponsorTimer = setTimeout(refreshSponsors, 1500); });
   maybeAskConsent();

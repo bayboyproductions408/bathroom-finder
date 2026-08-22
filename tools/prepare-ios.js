@@ -42,8 +42,16 @@ const STRINGS = {
   NSPhotoLibraryUsageDescription:
     'Choose a photo of a bathroom from your library to add to a review.',
   NSPhotoLibraryAddUsageDescription:
-    'Save a photo of a bathroom back to your library.'
+    'Save a photo of a bathroom back to your library.',
+  /* Apple rejects an app that shows the tracking prompt without explaining
+     it in plain language, and rejects tracking with no prompt at all. */
+  NSUserTrackingUsageDescription:
+    'Allow tracking and the ads in Bathroom Finder can be chosen for you, which earns more and keeps the app free. Say no and you will still see ads — just less relevant ones. Your location is never shared either way.'
 };
+
+/* AdMob refuses to start without its app id here, and the app crashes on
+   launch if the key is missing entirely. */
+const ADMOB_APP_ID = process.env.ADMOB_APP_ID || 'ca-app-pub-9072066961806430~1491102649';
 
 let plist = fs.readFileSync(PLIST, 'utf8');
 let added = 0;
@@ -56,6 +64,25 @@ for (const [key, value] of Object.entries(STRINGS)){
     plist = plist.replace('</dict>\n</plist>', `\t<key>${key}</key>\n\t<string>${value}</string>\n</dict>\n</plist>`);
     added++;
   }
+}
+
+/* AdMob application identifier */
+if (plist.includes('<key>GADApplicationIdentifier</key>')){
+  plist = plist.replace(/(<key>GADApplicationIdentifier<\/key>\s*<string>)[\s\S]*?(<\/string>)/, `$1${ADMOB_APP_ID}$2`);
+} else {
+  plist = plist.replace('</dict>\n</plist>',
+    `\t<key>GADApplicationIdentifier</key>\n\t<string>${ADMOB_APP_ID}</string>\n</dict>\n</plist>`);
+  added++;
+}
+console.log(`AdMob app id: ${ADMOB_APP_ID}`);
+
+/* SKAdNetwork identifiers let iOS attribute installs without tracking the
+   user. Google's own network id is the minimum; more can be added from
+   Google's published list to improve fill. */
+if (!plist.includes('SKAdNetworkItems')){
+  plist = plist.replace('</dict>\n</plist>',
+    `\t<key>SKAdNetworkItems</key>\n\t<array>\n\t\t<dict>\n\t\t\t<key>SKAdNetworkIdentifier</key>\n\t\t\t<string>cstr6suwn9.skadnetwork</string>\n\t\t</dict>\n\t</array>\n</dict>\n</plist>`);
+  added++;
 }
 
 /* Encryption declaration — without it App Store Connect asks every single

@@ -79,7 +79,7 @@ badge. Lead with the map — it is the only screenshot that explains the app ins
 
 ## Ads change your privacy declarations
 
-Right now the app ships **sponsored listings only** — chosen by the map area you are
+**AdMob is now configured for the native builds** (app id ca-app-pub-9072066961806430~1491102649, banner unit .../9430292092). The web app still ships **sponsored listings only** — chosen by the map area you are
 looking at, with no identifier and no profile. That keeps every answer below true.
 
 The moment you add a real ad network (AdMob or similar), you must revisit this:
@@ -105,7 +105,7 @@ Answer it exactly like this. It is a legal declaration; these answers match the 
 | Name (display name) | Yes | No | Optional | App functionality |
 | Photos | Yes | No | Optional | App functionality |
 | User-generated content (reviews, corrections) | Yes | No | Optional | App functionality |
-| Device or other IDs (the anonymous device token) | Yes | No | Required | App functionality, account management |
+| Device or other IDs (device token **and**, in the app build, the advertising ID) | Yes | **Yes — shared with Google AdMob** | Required | App functionality, account management, **advertising** |
 | **Approximate location** | **No** | No | — | Used on device only, never transmitted |
 | **Precise location** | **No** | No | — | Used on device only, never transmitted |
 
@@ -144,7 +144,9 @@ Expect **Everyone** or **Teen** depending on how the UGC questions are weighted.
 **Data Not Collected:** Location, Contacts, Health, Financial Info, Browsing History,
 Search History, Purchases, Diagnostics.
 
-**Used for tracking?** No. There are sponsored listings, but they are chosen by map
+**Used for tracking?** **Yes, in the App Store build** — AdMob uses the advertising identifier, so the app must show the App Tracking Transparency prompt (the usage string is set by tools/prepare-ios.js) and Identifiers must be declared as Used for Tracking. The web version does not.
+
+Were it not for AdMob the answer would be no: There are sponsored listings, but they are chosen by map
 area alone — no advertising identifier, no cross-app profile, no analytics SDK and no
 data broker. If you add an ad network this answer changes and ATT applies.
 
