@@ -1567,7 +1567,7 @@ function renderProfile(){
           <span class="tail">${I.back}</span></a>
         <a class="row navrow" href="privacy.html" style="text-decoration:none; color:inherit">
           <span class="ico" style="background:var(--surface-2); color:var(--ink-2)">${I.shield}</span>
-          <span><h3>Privacy</h3><span class="meta">Your location never leaves your phone</span></span>
+          <span><h3>Privacy</h3><span class="meta">Your exact location stays on your phone</span></span>
           <span class="tail">${I.back}</span></a>
         <a class="row navrow" href="terms.html" style="text-decoration:none; color:inherit">
           <span class="ico" style="background:var(--surface-2); color:var(--ink-2)">${I.bubbleAlt}</span>
@@ -1625,8 +1625,15 @@ function renderProfile(){
 async function refreshSponsors(){
   if (!map || Ads.isPlus()) return;
   const c = map.getCenter();
+  /* Two decimal places, ~1.1km. Sponsors are geofenced by neighbourhood, so
+     this is all the precision the feature needs — and it matters, because the
+     map centres on you when you tap the crosshair. At five decimals this
+     request was sending a metre-accurate fix of where someone is standing to
+     an ad endpoint, which is not what "ads based on the part of the map you
+     are looking at" means to the person reading it. */
+  const lat = c.lat.toFixed(2), lng = c.lng.toFixed(2);
   try {
-    const r = await fetch(apiURL(`/api/v1/sponsors?lat=${c.lat.toFixed(5)}&lng=${c.lng.toFixed(5)}`));
+    const r = await fetch(apiURL(`/api/v1/sponsors?lat=${lat}&lng=${lng}`));
     if (!r.ok) return;
     const {sponsors} = await r.json();
     state.sponsors = sponsors || [];
@@ -1724,7 +1731,8 @@ function maybeAskConsent(){
         <p style="margin:0;font-size:13px;line-height:1.6">You can allow ads to be
         personalised using an advertising identifier, or keep them
         <b>contextual only</b> — based on the part of the map you are looking at, and
-        nothing else. Either way your location never leaves your device.</p>
+        nothing else. Your exact position is never sent — choosing a sponsor uses the
+        map area rounded to about a kilometre.</p>
       </div>
       <button class="btn" id="c-no">Keep ads contextual</button>
       <button class="btn secondary" id="c-yes" style="margin-top:8px">Allow personalised ads</button>`);
