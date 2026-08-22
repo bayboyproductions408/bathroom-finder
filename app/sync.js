@@ -20,7 +20,7 @@ const Sync = (() => {
   const outbox = () => { try { return JSON.parse(localStorage.getItem(KEY_OUT) || '[]'); } catch(e){ return []; } };
   const setOutbox = list => { try { localStorage.setItem(KEY_OUT, JSON.stringify(list.slice(-200))); } catch(e){} };
 
-  async function req(method, path, body, extra){
+  async function req(method, path, body, extra, retried){
     const headers = {'Content-Type':'application/json', ...(extra || {})};
     if (identity && identity.token) headers.Authorization = 'Bearer ' + identity.token;
     const res = await fetch(BASE() + path, {
@@ -30,6 +30,18 @@ const Sync = (() => {
     const text = await res.text();
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch(e){ data = null; }
+
+    /* The server no longer recognises this device. That happens whenever the
+       database is reset — on free hosting, every restart. Without re-registering
+       here, every write from every existing device fails forever and the app
+       looks like it is working while silently saving nothing. */
+    if (res.status === 401 && !retried && identity){
+      identity = null;
+      try { localStorage.removeItem(KEY_ID); } catch(e){}
+      await ensureIdentity();
+      return req(method, path, body, extra, true);
+    }
+
     if (!res.ok) throw Object.assign(new Error((data && data.error) || `HTTP ${res.status}`), {status:res.status});
     return data;
   }
