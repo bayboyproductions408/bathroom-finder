@@ -21,53 +21,62 @@ Live now, free, no card anywhere:
 - Sponsored listings with geofencing, impression/click billing, budget cutoff
 - Privacy, terms and support pages published and linked from Profile
 
-## Durable storage: code done, one step is yours
+## Durable storage: DONE, live in production
 
-Render's free tier wipes the database on every restart — verified, not assumed:
-reviews went from 2 to 0 after one restart.
+Render's free tier wipes its disk on every restart — verified, not assumed:
+reviews went from 2 to 0 after one restart. That is fixed.
 
-**The fix is written and tested.** Storage now sits behind `server/db.js` with two
-interchangeable backings: a local file for development, and **Turso** — hosted
-SQLite, free tier, no card — in production. Every query in the backend was
-converted to async so the two cannot drift apart.
+Storage sits behind `server/db.js` with two interchangeable backings: a local
+file for development, and **Turso** — hosted SQLite, free tier, no card — in
+production. Every query in the backend was converted to async so the two cannot
+drift apart.
 
-Verified before shipping:
+**Live configuration**
 
-- All 45 backend tests pass against the local driver **and** against the real
-  libSQL driver — same tests, both backings, including photo blobs and the
-  duplicate-review guard.
-- A new durability suite writes a review, closes the database, reopens it, and
-  confirms the review, its rating, the device's identity token and the duplicate
-  guard all survived a restart.
-- Migration works on a database created before this change: a real one on disk
-  here, missing the newer `local_id` column, was upgraded on boot without loss.
+| | |
+|---|---|
+| Database | `bathroom-finder` on Turso, org `domhecht` |
+| Region | AWS US West (Oregon) — deliberately the same region as the Render service, so a query is a few ms instead of a cross-country round trip |
+| Engine | classic libSQL, *not* the TursoDB Rust rewrite — the tests were run against libSQL, and launch day is the wrong time to change engines |
+| Switch | `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` in Render → Environment |
 
-**Your one step:** create a free Turso account and paste two values into Render's
-Environment tab — `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. Step by step in
-`DEPLOY.md`. The token is a credential; it goes into Render and nowhere else.
+**Verified, in this order:**
 
-Check it worked by opening
-[/api/v1/health](https://bathroom-finder.onrender.com/api/v1/health) — it should
-flip from `"durable":false` to `"durable":true`. It already reports
-`"tursoReady":true`, meaning the server has what it needs and switching over
-will work rather than fail.
+1. All 45 backend tests pass against the local driver **and** against the real
+   libSQL driver — same tests, both backings, including photo blobs and the
+   duplicate-review guard.
+2. A durability suite writes a review, closes the database, reopens it, and
+   confirms the review, its rating, the device's identity token and the
+   duplicate guard all survived.
+3. Migration works on a database predating this change — a real one on disk
+   here, missing the `local_id` column, was upgraded on boot without loss.
+4. **In production:** wrote a review, then hit *Restart service* in Render — the
+   precise event that used to destroy data — and read it back intact
+   afterwards. Rating and count survived with it.
 
-Until those exist the server still runs, still on the wipe-on-restart file, and
-says so on its first line of log output. If the variables are set but wrong it
-refuses to start rather than silently falling back — a quiet fallback would look
-like a clean deploy and lose everything at the next restart.
+`/api/v1/health` now reports it, so this never has to be taken on trust:
+
+```json
+{"ok":true,"storage":"turso","durable":true,"tursoReady":true}
+```
+
+If the URL is ever set but wrong, the server refuses to start rather than
+falling back to disk. A silent fallback looks like a clean deploy and then
+throws away everything at the next restart.
 
 The per-device re-upload safety net stays in place underneath, so a contribution
 survives even a total server loss, as long as the device that wrote it comes back.
 
-Do this **before** inviting testers. Losing the first fifty reviews is the kind of
-thing people do not come back from.
+**Housekeeping:** verification left one review by user *Durability Probe* on a
+fake place at 0°, −160° (open Pacific). No real user can reach it — places load
+by map bounds — but it does count in the moderator dashboard totals. Remove it
+whenever you like by blocking that user in `/moderate.html`.
 
 ---
 
 ## Remaining before App Store submission
 
-1. **Turso variables** — above; a few minutes in two browser tabs.
+1. ~~**Durable storage**~~ — done, verified in production against a real restart.
 2. **Screenshots** — 6.7" (1290×2796) and 6.5" (1242×2688), 3–10 each. Take them on
    the installed app on your iPhone; the phone's own screenshot is exactly right.
    Lead with the map, then a detail page, then the review screen.

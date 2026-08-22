@@ -64,8 +64,10 @@ yourself.
 
 ## Making the data survive — Turso (free, no card)
 
-Without this, every deploy and every sleep-wake deletes all reviews. The code is
-already written and tested; it switches on when these two variables exist.
+**This is already done and live** — the steps below are kept as the record of how,
+and what to redo if the database is ever recreated. Production now answers
+`"storage":"turso","durable":true`, confirmed by writing a review, restarting the
+service, and reading it back intact.
 
 **1. Create the database** — at [turso.tech](https://turso.tech), sign up (GitHub
 sign-in works) and create a database. The free tier is 5 GB, 500 M row reads and
