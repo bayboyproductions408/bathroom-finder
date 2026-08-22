@@ -296,7 +296,12 @@ function createAPI({file, adminToken, url, authToken}){
 
   /* ---------------- routes ---------------- */
   const routes = {
-    'GET /api/v1/health': async () => ({ok:true, version:1, time:now()}),
+    /* storage/durable are here so "did Turso actually take?" can be answered
+       from outside, without reading a deploy log. Only the driver's name is
+       exposed — never the URL, and never the token. */
+    'GET /api/v1/health': async () => ({
+      ok: true, version: 1, time: now(),
+      storage: db.kind, durable: db.kind === 'turso'}),
 
     'POST /api/v1/register': async (req, body, ip) => {
       if (!rateLimit('reg:' + ip, 20, 3600000)) bad(429, 'Too many registrations from here');
