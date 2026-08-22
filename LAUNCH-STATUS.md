@@ -21,6 +21,21 @@ Live now, free, no card anywhere:
 - Sponsored listings with geofencing, impression/click billing, budget cutoff
 - Privacy, terms and support pages published and linked from Profile
 
+## Data loss: mitigated, not solved
+
+Render's free tier wipes the database on every restart — verified, not assumed:
+reviews went from 2 to 0 after one restart.
+
+Each device now keeps a record of what it wrote and puts it back when it finds
+the server has lost it. Re-uploads are idempotent, so this cannot duplicate.
+Verified end to end against the live server: wiped to 0, then restored to 1 on
+next launch without any prompting.
+
+**What this does not cover:** a contribution is only restored by the device that
+made it, so it comes back when that person next opens the app — not immediately.
+Photos are not restored at all (too large to keep client-side). If every tester
+uninstalls, the data is gone. It is a safety net, not durability.
+
 ## The one decision that is yours
 
 **Data does not survive a restart.** Render's free tier has no persistent disk,
