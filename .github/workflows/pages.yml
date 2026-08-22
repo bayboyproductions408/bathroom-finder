@@ -1,0 +1,75 @@
+# Publishes the web app to GitHub Pages.
+#
+# Why this exists: a real https certificate, free, with no new account — which
+# is what an iPhone needs before it will hand over location, register a service
+# worker, or offer Add to Home Screen.
+#
+# The backend is separate. With no API host configured the app runs in solo
+# mode: the map, search, filters, offline and photos all work, but reviews stay
+# on the device. Set the API_BASE repository variable once a backend is live
+# and the same site starts sharing.
+
+name: Deploy to Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Test before publishing
+        run: |
+          node tests/run.js
+          node --test tests/api.test.js
+
+      - name: Point the app at the backend, if there is one
+        env:
+          API_BASE: ${{ vars.API_BASE }}
+        run: |
+          if [ -n "$API_BASE" ]; then
+            node -e "
+              const fs=require('fs');
+              const p='app/config.js';
+              let s=fs.readFileSync(p,'utf8');
+              s=s.replace(/apiBase: '[^']*'/, \"apiBase: '\$API_BASE'\");
+              fs.writeFileSync(p,s);
+              console.log('backend: \$API_BASE');
+            "
+          else
+            echo "No API_BASE set — publishing in solo mode (nothing shared)."
+          fi
+
+      - name: Pages needs this or it hides files starting with an underscore
+        run: touch app/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: app
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
