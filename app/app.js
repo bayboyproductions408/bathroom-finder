@@ -582,7 +582,7 @@ function wireAd(root){
     const io = new IntersectionObserver(entries => {
       for (const e of entries) if (e.isIntersecting){
         io.disconnect();
-        fetch('/api/v1/sponsors/impression', {method:'POST',
+        fetch(apiURL('/api/v1/sponsors/impression'), {method:'POST',
           headers:{'Content-Type':'application/json'}, body:JSON.stringify({id})}).catch(()=>{});
       }
     }, {threshold:0.6});
@@ -592,7 +592,7 @@ function wireAd(root){
   if (cta) cta.addEventListener('click', e => {
     e.stopPropagation();
     if (kind === 'sponsored'){
-      fetch('/api/v1/sponsors/click', {method:'POST',
+      fetch(apiURL('/api/v1/sponsors/click'), {method:'POST',
         headers:{'Content-Type':'application/json'}, body:JSON.stringify({id})}).catch(()=>{});
       const s = (state.sponsors || []).find(x => x.id === id);
       if (s) map.setView([s.lat, s.lng], 17);
@@ -1572,7 +1572,7 @@ async function refreshSponsors(){
   if (!map || Ads.isPlus()) return;
   const c = map.getCenter();
   try {
-    const r = await fetch(`/api/v1/sponsors?lat=${c.lat.toFixed(5)}&lng=${c.lng.toFixed(5)}`);
+    const r = await fetch(apiURL(`/api/v1/sponsors?lat=${c.lat.toFixed(5)}&lng=${c.lng.toFixed(5)}`));
     if (!r.ok) return;
     const {sponsors} = await r.json();
     state.sponsors = sponsors || [];
@@ -1615,7 +1615,7 @@ function openAdvertise(){
     const business = el('ad-biz').value.trim(), contact = el('ad-contact').value.trim();
     if (!business || !contact){ toast('Name and a way to reach you, please', I.flag); return; }
     try {
-      const r = await fetch('/api/v1/lead', {method:'POST', headers:{'Content-Type':'application/json'},
+      const r = await fetch(apiURL('/api/v1/lead'), {method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({business, contact, note:el('ad-note').value.trim(),
                               lat:c && c.lat, lng:c && c.lng})});
       if (!r.ok) throw new Error((await r.json()).error);

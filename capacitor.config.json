@@ -1,0 +1,27 @@
+{
+  "appId": "com.bathroomfinder.app",
+  "appName": "Bathroom Finder",
+  "webDir": "app",
+  "bundledWebRuntime": false,
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#E8EEEF",
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "android": { "backgroundColor": "#E8EEEF" },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 800,
+      "backgroundColor": "#0F7B72",
+      "showSpinner": false
+    },
+    "Geolocation": {},
+    "Camera": {}
+  },
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "https",
+    "__comment": "Set 'url' to your deployed site to make the app load the live version (updates without resubmitting). Leave it unset to ship the web assets inside the binary — which is what Apple prefers to see, and what works with no signal.",
+    "cleartext": false
+  }
+}

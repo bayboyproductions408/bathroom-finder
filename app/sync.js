@@ -9,7 +9,8 @@
 'use strict';
 
 const Sync = (() => {
-  const BASE = '';                       // same origin
+  /* empty on the web (same origin); set by config.js in the native builds */
+  const BASE = () => (window.BF_CONFIG && window.BF_CONFIG.apiBase) || '';
   const KEY_ID = 'bf.identity.v1';
   const KEY_OUT = 'bf.outbox.v1';
 
@@ -22,7 +23,7 @@ const Sync = (() => {
   async function req(method, path, body, extra){
     const headers = {'Content-Type':'application/json', ...(extra || {})};
     if (identity && identity.token) headers.Authorization = 'Bearer ' + identity.token;
-    const res = await fetch(BASE + path, {
+    const res = await fetch(BASE() + path, {
       method, headers,
       body: method === 'GET' ? undefined : JSON.stringify(body || {})
     });
@@ -99,7 +100,7 @@ const Sync = (() => {
   }
   const pullPlace = id => online ? req('GET', `/api/v1/place?id=${encodeURIComponent(id)}`) : Promise.resolve(null);
 
-  const photoURL = id => BASE + '/api/v1/photo?id=' + encodeURIComponent(id);
+  const photoURL = id => BASE() + '/api/v1/photo?id=' + encodeURIComponent(id);
 
   return {
     get online(){ return online; },

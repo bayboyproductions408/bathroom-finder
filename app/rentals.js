@@ -19,7 +19,7 @@
 
 const Pay = (() => {
   const call = async (name, body) => {
-    const res = await fetch('/api/pay/' + name, {
+    const res = await fetch(((window.BF_CONFIG && window.BF_CONFIG.apiBase) || '') + '/api/pay/' + name, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(body || {})
     });

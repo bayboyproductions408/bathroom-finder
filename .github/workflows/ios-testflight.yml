@@ -1,0 +1,134 @@
+# Builds the iOS app on GitHub's macOS runner and uploads it to TestFlight.
+# This is what replaces owning a Mac.
+#
+# Free on public repos. On a private repo macOS minutes count 10x against the
+# 2,000 free minutes/month — a build takes ~8 minutes, so roughly 25 builds a
+# month before it costs anything.
+#
+# Set these repository secrets first (Settings → Secrets → Actions):
+#   APPSTORE_ISSUER_ID     App Store Connect → Users and Access → Integrations
+#   APPSTORE_KEY_ID        the key's ID
+#   APPSTORE_PRIVATE_KEY   the whole .p8 file contents, including BEGIN/END lines
+#
+# That API key is all it needs — no Apple ID password, no 2FA dance, and it can
+# be revoked from App Store Connect at any time.
+
+name: iOS TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: What testers should know about this build
+        required: false
+        default: Bathroom Finder test build
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run the tests first
+        run: |
+          node tests/run.js
+          node --test tests/api.test.js
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Generate the iOS project
+        run: npx cap add ios || echo "ios/ already exists"
+
+      - name: Patch Info.plist, the icon, and the backend URL
+        env:
+          # Repository variable (Settings → Secrets and variables → Actions →
+          # Variables). Without it the app builds but nothing shared works.
+          API_BASE: ${{ vars.API_BASE }}
+        run: node tools/prepare-ios.js
+
+      - name: Copy the web app in
+        # Must come after prepare-ios.js, which rewrites app/config.js —
+        # cap sync is what copies app/ into the iOS bundle.
+        run: npx cap sync ios
+
+      - name: Set the build number from the run number
+        run: |
+          cd ios/App
+          # CFBundleVersion must increase on every upload or App Store Connect
+          # rejects it; the run number is monotonic and free.
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" App/Info.plist
+          MARKETING=$(node -p "require('../../package.json').version")
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MARKETING" App/Info.plist
+          echo "version $MARKETING build ${{ github.run_number }}"
+
+      - name: Write the App Store Connect API key
+        env:
+          KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+        run: |
+          mkdir -p ~/private_keys
+          echo "$KEY" > ~/private_keys/AuthKey_${KEY_ID}.p8
+          chmod 600 ~/private_keys/AuthKey_${KEY_ID}.p8
+
+      - name: Archive
+        env:
+          ISSUER: ${{ secrets.APPSTORE_ISSUER_ID }}
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+        run: |
+          cd ios/App
+          # -allowProvisioningUpdates lets Xcode create the signing certificate
+          # and profile through the API key, so nothing has to be set up by hand.
+          xcodebuild -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_${KEY_ID}.p8 \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER" \
+            archive
+
+      - name: Export the IPA
+        env:
+          ISSUER: ${{ secrets.APPSTORE_ISSUER_ID }}
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_${KEY_ID}.p8 \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER"
+
+      - name: Clean up the key
+        if: always()
+        run: rm -rf ~/private_keys
+
+      - name: What happens next
+        run: |
+          echo "Uploaded. App Store Connect processes the build for 5–15 minutes,"
+          echo "then it appears under TestFlight and your testers get an email."

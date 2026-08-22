@@ -55,13 +55,24 @@ for (const m of html.matchAll(/<script src="(?!http)([^"]+)"/g))
 for (const m of html.matchAll(/<link[^>]+href="(?!http)([^"]+\.css)"/g))
   if (!shell.includes(`./${m[1]}`)) problems.push(`index.html loads ${m[1]} but sw.js will not cache it`);
 
-/* 4. things that must not ship */
+/* 4. the native build must not ship pointing at a dead backend */
+{
+  const cfg = fs.readFileSync(path.join(ROOT,'app','config.js'),'utf8');
+  const m = cfg.match(/apiBase: '([^']*)'/);
+  const build = (cfg.match(/build: '([^']*)'/) || [])[1];
+  if (build && build !== 'web' && !(m && m[1]))
+    problems.push('app/config.js is set to a native build but has no apiBase — nothing shared would work');
+  if (m && m[1] && build === 'web')
+    notes.push('app/config.js has apiBase set (' + m[1] + ') while marked as a web build — fine locally, but the web app normally uses same-origin');
+}
+
+/* 5. things that must not ship */
 for (const f of fs.readdirSync(path.join(ROOT, 'app')))
   if (f.startsWith('_')) problems.push(`app/${f} looks like a leftover scratch file`);
 if (fs.existsSync(path.join(ROOT, 'ledger.json'))) notes.push('ledger.json exists (dev payment records) — delete before a real deploy');
 if (!fs.existsSync(path.join(ROOT, 'certs', 'cert.pem'))) notes.push('no certs/ — https disabled, phones will refuse geolocation');
 
-/* 5. secrets */
+/* 6. secrets */
 const secret = /sk_live_|sk_test_[A-Za-z0-9]{10,}/;
 for (const dir of ['app', 'tools', '.']){
   const d = path.join(ROOT, dir);
