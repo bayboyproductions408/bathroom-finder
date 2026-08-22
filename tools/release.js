@@ -66,6 +66,14 @@ for (const m of html.matchAll(/<link[^>]+href="(?!http)([^"]+\.css)"/g))
     notes.push('app/config.js has apiBase set (' + m[1] + ') while marked as a web build — fine locally, but the web app normally uses same-origin');
 }
 
+/* the store requires reachable privacy, terms and support pages */
+for (const page of ['privacy.html','terms.html','support.html']){
+  const p = path.join(ROOT,'app',page);
+  if (!fs.existsSync(p)) problems.push(`app/${page} is missing — the App Store listing requires a reachable ${page.replace('.html','')} page`);
+  else if (!shell.includes('./'+page)) notes.push(page + ' is not cached for offline use');
+}
+notes.push('legal pages are published at /privacy.html, /terms.html, /support.html');
+
 /* 5. things that must not ship */
 for (const f of fs.readdirSync(path.join(ROOT, 'app')))
   if (f.startsWith('_')) problems.push(`app/${f} looks like a leftover scratch file`);

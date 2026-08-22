@@ -1521,6 +1521,23 @@ function renderProfile(){
         <button class="btn secondary" id="p-reset" style="margin-top:8px; color:var(--locked)">Erase everything on this device</button>
       </div>
     </div>
+    <div class="section">
+      <h2>About</h2>
+      <div class="card" style="padding:4px 14px">
+        <a class="row navrow" href="support.html" style="text-decoration:none; color:inherit">
+          <span class="ico" style="background:var(--surface-2); color:var(--ink-2)">${I.info}</span>
+          <span><h3>Help &amp; contact</h3><span class="meta">Report something, or tell us what broke</span></span>
+          <span class="tail">${I.back}</span></a>
+        <a class="row navrow" href="privacy.html" style="text-decoration:none; color:inherit">
+          <span class="ico" style="background:var(--surface-2); color:var(--ink-2)">${I.shield}</span>
+          <span><h3>Privacy</h3><span class="meta">Your location never leaves your phone</span></span>
+          <span class="tail">${I.back}</span></a>
+        <a class="row navrow" href="terms.html" style="text-decoration:none; color:inherit">
+          <span class="ico" style="background:var(--surface-2); color:var(--ink-2)">${I.bubbleAlt}</span>
+          <span><h3>Terms</h3><span class="meta">What this app is and is not</span></span>
+          <span class="tail">${I.back}</span></a>
+      </div>
+    </div>
     <div class="section" style="padding-bottom:30px">
       <h2>Credits</h2>
       <div class="card"><p style="margin:0; font-size:12px; line-height:1.6; color:var(--ink-2)">
