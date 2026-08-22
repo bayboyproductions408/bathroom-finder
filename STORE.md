@@ -106,12 +106,20 @@ Answer it exactly like this. It is a legal declaration; these answers match the 
 | Photos | Yes | No | Optional | App functionality |
 | User-generated content (reviews, corrections) | Yes | No | Optional | App functionality |
 | Device or other IDs (device token **and**, in the app build, the advertising ID) | Yes | **Yes — shared with Google AdMob** | Required | App functionality, account management, **advertising** |
-| **Approximate location** | **No** | No | — | Used on device only, never transmitted |
-| **Precise location** | **No** | No | — | Used on device only, never transmitted |
+| **Approximate location** | **Yes** | **Yes — the sponsor lookup** | Required | **Advertising** — the centre of the visible map, rounded to ~1.1km |
+| **Precise location** | **No** | No | — | The GPS fix is used on device only and never transmitted |
 
-Location is the one people get wrong. The app *uses* location — Play asks whether you
-*collect* it, meaning transmit off the device. It never leaves the phone, so the honest
-answer is No. Do not tick it because the app asks for the permission.
+Location is the one people get wrong, and this app got it wrong for a while. Play asks
+whether you *collect* it, meaning transmit off the device — not whether you ask for the
+permission. Two different things happen here and they need different answers:
+
+- The **GPS fix** that sorts results by distance never leaves the phone. Precise
+  location: **No**.
+- The **centre of the map being viewed** is sent to the sponsor endpoint so the app can
+  ask which paid listings are in that area. That is a transmission, so approximate
+  location is **Yes**, shared, for advertising. It is rounded to two decimal places
+  (~1.1km); it used to be five (~1m), which meant tapping the crosshair sent a
+  metre-accurate position to an ad endpoint. Fixed in v1.4.12.
 
 Also declare:
 - **Encrypted in transit:** Yes (https).
@@ -188,8 +196,10 @@ offline plugins so the app genuinely uses the platform, and say so in the review
 **App Review notes** — write this in the submission, it prevents avoidable rejections:
 
 > Bathroom Finder is a community map of public bathrooms. Sign-in is not required and
-> there is no account; the app works immediately on launch. Location is used on-device
-> to sort results and is never transmitted. All user photos pass an on-device content
+> there is no account; the app works immediately on launch. The GPS fix is used on-device
+> to sort results and never leaves the phone; separately, the centre of the visible map is
+> sent rounded to ~1.1km so the app can ask which sponsored listings are in that area,
+> which is the Coarse Location / Third-Party Advertising entry in the privacy labels. All user photos pass an on-device content
 > check and are then held for human review before anyone else can see them; users can
 > report content and moderators can block contributors. The rental feature is
 > non-functional in this build and takes no payment.
