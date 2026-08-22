@@ -43,19 +43,21 @@ jobs:
       - name: Point the app at the backend, if there is one
         env:
           API_BASE: ${{ vars.API_BASE }}
+        # Read the value inside node from the environment. Interpolating it
+        # through the shell into a -e string silently wrote the literal text
+        # "$API_BASE" into the shipped config, and the deploy still passed.
+        run: node tools/set-api-base.js
+
+      - name: Fail if the backend URL did not actually get written
+        env:
+          API_BASE: ${{ vars.API_BASE }}
         run: |
-          if [ -n "$API_BASE" ]; then
-            node -e "
-              const fs=require('fs');
-              const p='app/config.js';
-              let s=fs.readFileSync(p,'utf8');
-              s=s.replace(/apiBase: '[^']*'/, \"apiBase: '\$API_BASE'\");
-              fs.writeFileSync(p,s);
-              console.log('backend: \$API_BASE');
-            "
-          else
-            echo "No API_BASE set — publishing in solo mode (nothing shared)."
+          if [ -n "$API_BASE" ] && ! grep -q "apiBase: '$API_BASE'" app/config.js; then
+            echo "config.js was not rewritten correctly:"
+            grep "apiBase" app/config.js
+            exit 1
           fi
+          grep "apiBase" app/config.js
 
       - name: Pages needs this or it hides files starting with an underscore
         run: touch app/.nojekyll

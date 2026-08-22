@@ -53,7 +53,9 @@ jobs:
           # Repository variable (Settings → Secrets and variables → Actions →
           # Variables). Without it the app builds but nothing shared works.
           API_BASE: ${{ vars.API_BASE }}
-        run: node tools/prepare-ios.js
+        run: |
+          node tools/set-api-base.js
+          node tools/prepare-ios.js
 
       - name: Copy the web app in
         # Must come after prepare-ios.js, which rewrites app/config.js —
