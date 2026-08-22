@@ -3,7 +3,7 @@
 
    Bump APP_VERSION to ship an update. Clients notice the new worker,
    show "Update ready", and swap over on tap.                          */
-const APP_VERSION = 'v1.4.3';
+const APP_VERSION = 'v1.4.4';
 const SHELL = `shell-${APP_VERSION}`;
 const TILES = 'tiles-v1';
 const MODELS = 'models-v1';
@@ -88,6 +88,25 @@ self.addEventListener('fetch', e => {
       const res = await fetch(req);
       if (res.ok) cache.put(req, res.clone());
       return res;
+    })());
+    return;
+  }
+
+  /* config.js says where the backend lives. Cache-first would pin an old
+     backend URL on every returning visitor until the version changed, so
+     this one file is network-first with the cache only as a fallback. */
+  if (/\/config\.js(\?|$)/.test(url)){
+    e.respondWith((async () => {
+      const cache = await caches.open(SHELL);
+      try {
+        const res = await fetch(req, {cache:'no-store'});
+        if (res.ok) cache.put(req, res.clone());
+        return res;
+      } catch(err){
+        const hit = await cache.match(req, {ignoreSearch:true});
+        return hit || new Response("window.BF_CONFIG={apiBase:'',build:'web'};window.apiURL=p=>p;",
+                                   {headers:{'Content-Type':'text/javascript'}});
+      }
     })());
     return;
   }
