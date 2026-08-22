@@ -144,8 +144,24 @@ const api = createAPI({
   adminToken: ADMIN_TOKEN
 });
 
+/* The web app is served from GitHub Pages while the API lives here, so the
+   browser needs permission to talk across origins. Allowlisted, not '*' —
+   an open API invites other sites to spend your rate limits. */
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ||
+  'https://bayboyproductions408.github.io').split(',').map(s => s.trim()).filter(Boolean);
+
 function serve(req, res){
   res.setHeader('Cache-Control', 'no-cache');
+
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.includes(origin)){
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Admin-Token');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Max-Age', '86400');
+  }
+  if (req.method === 'OPTIONS'){ res.writeHead(204); return res.end(); }
 
   if (req.url.startsWith('/api/v1/')){
     const url = new URL(req.url, 'http://localhost');
