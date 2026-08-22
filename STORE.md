@@ -77,6 +77,23 @@ badge. Lead with the map — it is the only screenshot that explains the app ins
 
 ---
 
+## Ads change your privacy declarations
+
+Right now the app ships **sponsored listings only** — chosen by the map area you are
+looking at, with no identifier and no profile. That keeps every answer below true.
+
+The moment you add a real ad network (AdMob or similar), you must revisit this:
+
+- Play Data Safety gains **Device or other IDs → collected AND shared**, purpose
+  Advertising, plus a third-party disclosure for the network.
+- Apple's labels gain **Identifiers → Used for Tracking**, which moves the app into
+  App Tracking Transparency and requires the ATT prompt before any tracking.
+- The EU/UK need a consent screen. There is one built (contextual by default,
+  personalised only on an explicit yes) but the network must honour the answer.
+
+The clean position — collecting almost nothing — is worth something in itself.
+Spending it should be a deliberate decision, not a side effect of adding a banner.
+
 ## Google Play — Data Safety form
 
 Answer it exactly like this. It is a legal declaration; these answers match the code.
@@ -127,7 +144,9 @@ Expect **Everyone** or **Teen** depending on how the UGC questions are weighted.
 **Data Not Collected:** Location, Contacts, Health, Financial Info, Browsing History,
 Search History, Purchases, Diagnostics.
 
-**Used for tracking?** No. There is no advertising, no analytics SDK, no data broker.
+**Used for tracking?** No. There are sponsored listings, but they are chosen by map
+area alone — no advertising identifier, no cross-app profile, no analytics SDK and no
+data broker. If you add an ad network this answer changes and ATT applies.
 
 **Permission strings** — Apple rejects vague ones. Use these verbatim in `Info.plist`:
 

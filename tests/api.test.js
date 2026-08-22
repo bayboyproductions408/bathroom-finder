@@ -273,3 +273,79 @@ test('moderators can list contributors to act on', async () => {
   const b = r.body.users.find(u => u.id === bob.userId);
   assert.ok(b && typeof b.reviews === 'number', 'each contributor shows what they have posted');
 });
+
+/* ---------- monetisation ---------- */
+let campaignId;
+test('creating a campaign needs the moderator token', async () => {
+  const r = await call('POST', '/api/v1/moderation/sponsor',
+    {body:{business:'Sneaky Co', headline:'buy', lat:51.5, lng:-0.12}, token:alice.token});
+  assert.strictEqual(r.status, 403);
+});
+
+test('a campaign can be created and goes live', async () => {
+  const r = await call('POST', '/api/v1/moderation/sponsor', {admin:'test-admin', body:{
+    business:'Bell & Bean Coffee', headline:'Clean bathroom, no purchase needed',
+    body:'Two minutes away, open until 8pm', cta:'Directions',
+    lat:51.5005, lng:-0.1201, radius:1500, status:'live',
+    cpmCents:500, cpcCents:40, budgetCents:5000, contact:'ads@example.com'}});
+  assert.strictEqual(r.status, 200);
+  campaignId = r.body.id;
+});
+
+test('the app can fetch nearby sponsors without a login', async () => {
+  const r = await call('GET', '/api/v1/sponsors', {query:'?lat=51.5&lng=-0.12'});
+  assert.strictEqual(r.status, 200);
+  assert.ok(r.body.sponsors.some(s => s.id === campaignId));
+});
+
+test('sponsors far away are not served', async () => {
+  const r = await call('GET', '/api/v1/sponsors', {query:'?lat=40.71&lng=-74.0'});
+  assert.strictEqual(r.body.sponsors.length, 0, 'a London café must not advertise in New York');
+});
+
+test('impressions and clicks are counted, and spend accrues', async () => {
+  await call('POST', '/api/v1/sponsors/impression', {body:{id:campaignId}});
+  await call('POST', '/api/v1/sponsors/click', {body:{id:campaignId}});
+  const r = await call('GET', '/api/v1/moderation/revenue', {admin:'test-admin'});
+  const c = r.body.campaigns.find(x => x.id === campaignId);
+  assert.strictEqual(c.impressions, 1);
+  assert.strictEqual(c.clicks, 1);
+  assert.ok(r.body.revenue_cents > 0, 'a click at 40c should register spend');
+});
+
+test('a paused campaign stops being served', async () => {
+  await call('POST', '/api/v1/moderation/sponsor', {admin:'test-admin', body:{id:campaignId, status:'paused'}});
+  const r = await call('GET', '/api/v1/sponsors', {query:'?lat=51.5&lng=-0.12'});
+  assert.ok(!r.body.sponsors.some(s => s.id === campaignId));
+  await call('POST', '/api/v1/moderation/sponsor', {admin:'test-admin', body:{id:campaignId, status:'live'}});
+});
+
+test('a campaign stops when its budget is spent', async () => {
+  const made = await call('POST', '/api/v1/moderation/sponsor', {admin:'test-admin', body:{
+    business:'Tiny Budget Ltd', headline:'One click only', lat:51.5006, lng:-0.1202,
+    status:'live', cpcCents:100, budgetCents:100}});
+  const id = made.body.id;
+  let live = await call('GET', '/api/v1/sponsors', {query:'?lat=51.5&lng=-0.12'});
+  assert.ok(live.body.sponsors.some(s => s.id === id), 'should serve before the budget is gone');
+  await call('POST', '/api/v1/sponsors/click', {body:{id}});
+  live = await call('GET', '/api/v1/sponsors', {query:'?lat=51.5&lng=-0.12'});
+  assert.ok(!live.body.sponsors.some(s => s.id === id), 'must stop the moment the budget is spent');
+});
+
+test('businesses can send an advertising enquiry', async () => {
+  const r = await call('POST', '/api/v1/lead',
+    {body:{business:'Corner Cafe', contact:'owner@example.com', note:'Interested', lat:51.5, lng:-0.12}});
+  assert.strictEqual(r.status, 200);
+  const seen = await call('GET', '/api/v1/moderation/revenue', {admin:'test-admin'});
+  assert.ok(seen.body.leads.some(l => l.business === 'Corner Cafe'));
+});
+
+test('an enquiry without a contact is refused', async () => {
+  assert.strictEqual((await call('POST', '/api/v1/lead', {body:{business:'No Contact Ltd'}})).status, 400);
+});
+
+test('the revenue dashboard reports what matters', async () => {
+  const r = await call('GET', '/api/v1/moderation/revenue', {admin:'test-admin'});
+  for (const k of ['live_campaigns','revenue_cents','impressions','clicks','open_leads','ctr'])
+    assert.ok(k in r.body, `dashboard is missing ${k}`);
+});

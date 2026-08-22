@@ -106,7 +106,8 @@ const community = id => (store.community[id] = store.community[id] ||
 /* ---------- state ---------- */
 const features = new Map();
 const state = {cats:new Set(['toilets','food','lodging','shop','fuel','civic','host']), attrs:new Set(),
-               sort:'dist', center:null, me:null, sel:null, dropMode:null, panel:null, listCache:[]};
+               sort:'dist', center:null, me:null, sel:null, dropMode:null, panel:null, listCache:[],
+               sponsors:[], currentAd:null, listSignature:null};
 const fetched = [];
 
 /* ---------- theme ---------- */
@@ -556,17 +557,93 @@ function rowHTML({f, d}){
     </span>
   </button>`;
 }
+/* A paid placement, always labelled. It sits inside the list rather than
+   floating over the map, because covering the map is what makes people
+   delete an app they opened in a hurry. */
+function adHTML(ad){
+  if (!ad) return '';
+  const sponsored = ad.kind === 'sponsored';
+  return `<div class="adslot ${sponsored ? 'sponsored' : 'house'}" data-ad="${esc(ad.id)}" data-adkind="${esc(ad.kind)}">
+    <div class="adlabel">${sponsored ? 'Sponsored' : 'From Bathroom Finder'}</div>
+    <div class="adbody">
+      <h3>${esc(sponsored ? ad.headline : ad.title)}</h3>
+      <p>${esc(ad.body || '')}</p>
+      ${sponsored && ad.distance != null ? `<span class="addist num">${showDist(ad.distance)} away · ${esc(ad.business)}</span>` : ''}
+    </div>
+    <button class="minibtn adcta" data-adcta="${esc(ad.id)}">${esc(ad.cta || 'Open')}</button>
+  </div>`;
+}
+function wireAd(root){
+  const el2 = root.querySelector('[data-ad]');
+  if (!el2) return;
+  const id = el2.dataset.ad, kind = el2.dataset.adkind;
+  /* count the impression once it has actually been on screen */
+  if (kind === 'sponsored' && 'IntersectionObserver' in window){
+    const io = new IntersectionObserver(entries => {
+      for (const e of entries) if (e.isIntersecting){
+        io.disconnect();
+        fetch('/api/v1/sponsors/impression', {method:'POST',
+          headers:{'Content-Type':'application/json'}, body:JSON.stringify({id})}).catch(()=>{});
+      }
+    }, {threshold:0.6});
+    io.observe(el2);
+  }
+  const cta = root.querySelector('[data-adcta]');
+  if (cta) cta.addEventListener('click', e => {
+    e.stopPropagation();
+    if (kind === 'sponsored'){
+      fetch('/api/v1/sponsors/click', {method:'POST',
+        headers:{'Content-Type':'application/json'}, body:JSON.stringify({id})}).catch(()=>{});
+      const s = (state.sponsors || []).find(x => x.id === id);
+      if (s) map.setView([s.lat, s.lng], 17);
+      toast('Showing ' + (s ? s.business : 'the sponsor'), I.nav);
+    } else {
+      const action = (Ads.HOUSE.find(h => h.id === id) || {}).action;
+      if (action === 'sponsor') openAdvertise();
+      else if (action === 'plus') openPlus();
+      else if (action === 'add') startDropMode('add', pt => openAddForm(pt));
+    }
+  });
+}
+
 function renderList(){
   const rows = listFeatures();
   state.listCache = rows;
   const head = el('sheet-count');
   if (map.getZoom() < 13) head.textContent = 'Zoom in to load bathrooms';
   else head.textContent = rows.length ? `${rows.length} place${rows.length===1?'':'s'} in view` : 'Nothing in view yet';
-  el('sheet-list').innerHTML = rows.length ? rows.map(rowHTML).join('')
-    : `<div class="empty"><h3>${map.getZoom() < 13 ? 'Pick a place to start' : 'Nothing here yet'}</h3>
+  /* One slot, after the first handful of results — never above them. The
+     first thing on screen is always a real bathroom. */
+  let body;
+  if (!rows.length){
+    body = `<div class="empty"><h3>${map.getZoom() < 13 ? 'Pick a place to start' : 'Nothing here yet'}</h3>
        <p>${map.getZoom() < 13 ? 'Search a city above, or tap the crosshair to jump to where you are.'
          : 'No mapped bathrooms in this view. If you know one, add it — you will be the first.'}</p></div>`;
-  wireRows(el('sheet-list'));
+  } else {
+    const html = rows.map(rowHTML);
+    if (state.currentAd && html.length > 2)
+      html.splice(Math.min(Ads.LIST_EVERY, html.length), 0, adHTML(state.currentAd));
+    body = html.join('');
+  }
+  /* Background syncs call this every few seconds. Rebuilding the list when
+     nothing changed yanks the scroll position out from under whoever is
+     reading it — and quietly destroys the ad's viewability tracking, so
+     nothing ever bills. Skip identical renders, and keep the scroll. */
+  const list = el('sheet-list');
+  const signature = [
+    rows.map(r => r.f.id).join(','),
+    state.currentAd && state.currentAd.id,
+    state.sort, [...state.cats].join(''), [...state.attrs].join(''),
+    store.saved.join(','), Ads.isPlus() ? 'plus' : ''
+  ].join('|');
+  if (signature === state.listSignature && list.children.length) return;
+  state.listSignature = signature;
+
+  const keepScroll = list.scrollTop;
+  list.innerHTML = body;
+  list.scrollTop = keepScroll;
+  wireRows(list);
+  wireAd(list);
   const sc = el('savecount');
   sc.textContent = store.saved.length; sc.hidden = store.saved.length === 0;
 }
@@ -1409,6 +1486,19 @@ function renderProfile(){
       </div>
     </div>
     <div class="section">
+      <h2>Support the app</h2>
+      <div class="card" style="padding:4px 14px">
+        <button class="row navrow" data-nav="plus">
+          <span class="ico" style="background:var(--accent-soft); color:var(--accent)">${I.sparkle}</span>
+          <span><h3>Bathroom Finder Plus</h3><span class="meta">${Ads.isPlus() ? 'Active — no ads' : 'Remove ads, offline city packs'}</span></span>
+          <span class="tail">${I.back}</span></button>
+        <button class="row navrow" data-nav="advertise">
+          <span class="ico" style="background:var(--code-soft); color:var(--code)">${I.coin}</span>
+          <span><h3>Advertise your business</h3><span class="meta">Reach people looking for a bathroom nearby</span></span>
+          <span class="tail">${I.back}</span></button>
+      </div>
+    </div>
+    <div class="section">
       <h2>Testing this app</h2>
       <div class="card" style="padding:4px 14px">
         <button class="row navrow" data-nav="feedback">
@@ -1443,6 +1533,8 @@ function renderProfile(){
     else if (n === 'console'){ renderHostConsole(); openPanel('console'); }
     else if (n === 'moderation'){ renderModeration(); openPanel('moderation'); }
     else if (n === 'feedback') openFeedback();
+    else if (n === 'plus') openPlus();
+    else if (n === 'advertise') openAdvertise();
   }));
   el('p-rename').addEventListener('click', () => {
     openModal(`<h2>What should we call you?</h2>
@@ -1473,6 +1565,117 @@ function renderProfile(){
       toast('Everything erased', I.check);
     });
   });
+}
+
+/* ---------- money ----------------------------------------------------- */
+async function refreshSponsors(){
+  if (!map || Ads.isPlus()) return;
+  const c = map.getCenter();
+  try {
+    const r = await fetch(`/api/v1/sponsors?lat=${c.lat.toFixed(5)}&lng=${c.lng.toFixed(5)}`);
+    if (!r.ok) return;
+    const {sponsors} = await r.json();
+    state.sponsors = sponsors || [];
+    Ads.setSponsors(state.sponsors);
+  } catch(e){ /* ads must never break the map */ }
+  await refreshAd();
+}
+async function refreshAd(){
+  try { state.currentAd = await Ads.slot({origin: state.me || (map && map.getCenter())}); }
+  catch(e){ state.currentAd = null; }
+}
+
+/* The pitch to a business. This is the revenue line that is actually worth
+   selling — local intent beats a banner by an order of magnitude. */
+function openAdvertise(){
+  const c = map ? map.getCenter() : null;
+  openModal(`
+    <h2>Put your business in front of people looking for a bathroom</h2>
+    <p class="lede">They are already nearby, already looking, and about to walk into
+    somebody's premises. It might as well be yours — most people buy something.</p>
+    <div class="card" style="margin-bottom:16px">
+      <p style="margin:0 0 10px; font-size:13px; line-height:1.6"><b>How it works.</b> Your
+      listing appears in the nearby list, clearly marked as sponsored, only to people
+      within walking distance of you. You pay per thousand views or per tap.</p>
+      <p style="margin:0; font-size:12.5px; line-height:1.6; color:var(--ink-2)">
+      We will not bury a closer, cleaner, free bathroom underneath a paid one. The
+      sponsored slot sits below real results, because an app people stop trusting is
+      worth nothing to advertise on.</p>
+    </div>
+    <div class="field"><span>Business name</span><input class="input" id="ad-biz" placeholder="e.g. Bell &amp; Bean Coffee"></div>
+    <div class="field"><span>How do we reach you?</span>
+      <input class="input" id="ad-contact" placeholder="Email or phone">
+      <span class="hint">Only used to reply about advertising.</span></div>
+    <div class="field"><span>Anything you want to say?</span>
+      <textarea class="input" id="ad-note" placeholder="Where you are, opening hours, what you would want the listing to say"></textarea></div>
+    <button class="btn" id="ad-send">Send enquiry</button>
+    <p style="font-size:11.5px;color:var(--ink-3);line-height:1.55;margin:14px 2px 0">
+      Nothing is charged and nothing goes live until we have spoken.</p>`);
+  el('ad-send').addEventListener('click', async () => {
+    const business = el('ad-biz').value.trim(), contact = el('ad-contact').value.trim();
+    if (!business || !contact){ toast('Name and a way to reach you, please', I.flag); return; }
+    try {
+      const r = await fetch('/api/v1/lead', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({business, contact, note:el('ad-note').value.trim(),
+                              lat:c && c.lat, lng:c && c.lng})});
+      if (!r.ok) throw new Error((await r.json()).error);
+      closeModal(); toast('Thanks — we will be in touch', I.check);
+    } catch(err){ toast(String(err.message || 'Could not send that'), I.flag); }
+  });
+}
+
+function openPlus(){
+  const plus = Ads.isPlus();
+  openModal(`
+    <h2>Bathroom Finder Plus</h2>
+    <p class="lede">${plus ? 'You have Plus. Thank you — it is what keeps this running.'
+      : 'A few pounds a year, and the app stops needing advertisers.'}</p>
+    <div class="card" style="margin-bottom:14px">
+      ${[['No ads at all','The sponsored slot disappears'],
+         ['Offline city packs','Download a whole city before you travel'],
+         ['Filters that stick','Step-free, baby changing, gender neutral — remembered'],
+         ['Early access','New features before everyone else']]
+        .map(([t,d]) => `<div class="osmrow" style="border-top:none">${I.check}<span><b>${t}</b> — ${d}</span></div>`).join('')}
+    </div>
+    ${plus ? `<button class="btn secondary" id="plus-off">Turn Plus off (test build)</button>`
+           : `<button class="btn" id="plus-on">Try it — free while we are testing</button>`}
+    <p style="font-size:11.5px;color:var(--ink-3);line-height:1.55;margin:14px 2px 0">
+      Billing is not connected in this build, so nothing is charged. On the stores this
+      would be an in-app subscription, which Apple and Google take 15–30% of.</p>`);
+  const on = el('plus-on'), off = el('plus-off');
+  if (on) on.addEventListener('click', () => {
+    try { localStorage.setItem('bf.plus','1'); } catch(e){}
+    state.currentAd = null; closeModal(); renderList(); renderProfile();
+    toast('Plus is on — no more ads', I.sparkle);
+  });
+  if (off) off.addEventListener('click', () => {
+    try { localStorage.removeItem('bf.plus'); } catch(e){}
+    closeModal(); refreshAd().then(renderList); renderProfile();
+    toast('Plus turned off', I.check);
+  });
+}
+
+/* Asked once, before any personalised ad runs. Saying no is a real choice
+   that leaves only contextual ads — not a dark pattern that nags. */
+function maybeAskConsent(){
+  if (Ads.consentAsked() || Ads.isPlus()) return;
+  setTimeout(() => {
+    if (state.panel || el('modal').dataset.open === 'true') return;
+    openModal(`
+      <h2>Ads in this app</h2>
+      <p class="lede">Bathroom Finder is free, and sponsored listings from nearby
+      businesses are how it stays free.</p>
+      <div class="card" style="margin-bottom:14px">
+        <p style="margin:0;font-size:13px;line-height:1.6">You can allow ads to be
+        personalised using an advertising identifier, or keep them
+        <b>contextual only</b> — based on the part of the map you are looking at, and
+        nothing else. Either way your location never leaves your device.</p>
+      </div>
+      <button class="btn" id="c-no">Keep ads contextual</button>
+      <button class="btn secondary" id="c-yes" style="margin-top:8px">Allow personalised ads</button>`);
+    el('c-no').addEventListener('click', () => { Ads.setConsent(false); closeModal(); });
+    el('c-yes').addEventListener('click', () => { Ads.setConsent(true); closeModal(); });
+  }, 20000);   // not on first launch — let someone find a bathroom first
 }
 
 /* ---------- tester feedback ---------- */
@@ -1906,6 +2109,9 @@ function boot(){
 
   registerWorker();
   startSync();
+  refreshSponsors().then(() => renderList());
+  map.on('moveend', () => { clearTimeout(sponsorTimer); sponsorTimer = setTimeout(refreshSponsors, 1500); });
+  maybeAskConsent();
   status('Search a city, or tap the crosshair to find bathrooms near you', 5200);
 }
 
@@ -1927,7 +2133,7 @@ async function startSync(){
     updateSyncBadge();
   });
 }
-let pullTimer = null;
+let pullTimer = null, sponsorTimer = null;
 
 function setOffline(off){
   el('offline').hidden = !off;

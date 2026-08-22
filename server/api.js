@@ -70,6 +70,27 @@ function open(file){
     CREATE TABLE IF NOT EXISTS feedback(
       id TEXT PRIMARY KEY, user_id TEXT, text TEXT NOT NULL, context TEXT,
       created INTEGER NOT NULL, done INTEGER NOT NULL DEFAULT 0);
+
+    /* Sponsored listings — a business paying to be the bathroom people are
+       sent to. Billing needs counts, so impressions and clicks are recorded
+       and the placement stops when the budget is spent. */
+    CREATE TABLE IF NOT EXISTS sponsors(
+      id TEXT PRIMARY KEY, place_id TEXT, business TEXT NOT NULL,
+      headline TEXT NOT NULL, body TEXT, cta TEXT,
+      lat REAL NOT NULL, lng REAL NOT NULL, radius INTEGER NOT NULL DEFAULT 1500,
+      status TEXT NOT NULL DEFAULT 'pending',
+      cpm_cents INTEGER NOT NULL DEFAULT 0, cpc_cents INTEGER NOT NULL DEFAULT 0,
+      budget_cents INTEGER NOT NULL DEFAULT 0, spent_cents INTEGER NOT NULL DEFAULT 0,
+      impressions INTEGER NOT NULL DEFAULT 0, clicks INTEGER NOT NULL DEFAULT 0,
+      contact TEXT, starts INTEGER, ends INTEGER, created INTEGER NOT NULL);
+    CREATE INDEX IF NOT EXISTS sponsors_live ON sponsors(status, lat, lng);
+
+    /* Enquiries from businesses who want to advertise — the actual sales
+       pipeline, and the thing worth checking every morning. */
+    CREATE TABLE IF NOT EXISTS leads(
+      id TEXT PRIMARY KEY, business TEXT NOT NULL, contact TEXT NOT NULL,
+      note TEXT, lat REAL, lng REAL, created INTEGER NOT NULL,
+      handled INTEGER NOT NULL DEFAULT 0);
   `);
   return db;
 }
@@ -149,6 +170,34 @@ function createAPI({file, adminToken}){
     corrFor:     db.prepare(`SELECT kind, value, created, COUNT(*) OVER (PARTITION BY kind) votes
                              FROM corrections WHERE place_id = ? ORDER BY created DESC, rowid DESC`),
     insFeedback: db.prepare('INSERT INTO feedback(id, user_id, text, context, created) VALUES (?,?,?,?,?)'),
+
+    /* live sponsors near a point, cheap bounding-box filter first */
+    liveSponsors: db.prepare(`SELECT * FROM sponsors
+                              WHERE status = 'live'
+                                AND (budget_cents = 0 OR spent_cents < budget_cents)
+                                AND (starts IS NULL OR starts <= ?) AND (ends IS NULL OR ends >= ?)
+                                AND lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?
+                              ORDER BY cpm_cents DESC LIMIT 20`),
+    sponsorById:  db.prepare('SELECT * FROM sponsors WHERE id = ?'),
+    countImpression: db.prepare(`UPDATE sponsors SET impressions = impressions + 1,
+                                   spent_cents = spent_cents + (cpm_cents / 1000.0)
+                                 WHERE id = ?`),
+    countClick:   db.prepare(`UPDATE sponsors SET clicks = clicks + 1,
+                                spent_cents = spent_cents + cpc_cents WHERE id = ?`),
+    allSponsors:  db.prepare('SELECT * FROM sponsors ORDER BY created DESC LIMIT 200'),
+    insSponsor:   db.prepare(`INSERT INTO sponsors(id, place_id, business, headline, body, cta,
+                                lat, lng, radius, status, cpm_cents, cpc_cents, budget_cents,
+                                contact, starts, ends, created)
+                              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`),
+    setSponsorStatus: db.prepare('UPDATE sponsors SET status = ? WHERE id = ?'),
+    insLead:      db.prepare('INSERT INTO leads(id, business, contact, note, lat, lng, created) VALUES (?,?,?,?,?,?,?)'),
+    allLeads:     db.prepare('SELECT * FROM leads ORDER BY created DESC LIMIT 200'),
+    revenue:      db.prepare(`SELECT
+                    (SELECT COUNT(*) FROM sponsors WHERE status='live') live_campaigns,
+                    (SELECT COALESCE(SUM(spent_cents),0) FROM sponsors) revenue_cents,
+                    (SELECT COALESCE(SUM(impressions),0) FROM sponsors) impressions,
+                    (SELECT COALESCE(SUM(clicks),0) FROM sponsors) clicks,
+                    (SELECT COUNT(*) FROM leads WHERE handled=0) open_leads`),
     allFeedback: db.prepare(`SELECT f.*, u.name AS user_name FROM feedback f LEFT JOIN users u ON u.id = f.user_id
                              ORDER BY f.created DESC LIMIT 200`),
     counts:      db.prepare(`SELECT
@@ -355,6 +404,88 @@ function createAPI({file, adminToken}){
       q.insFeedback.run(uid('fb'), u ? u.id : null, text.slice(0, 4000),
         json(body.context || null), now());
       return {ok:true};
+    },
+
+    /* ---- sponsored listings ---------------------------------------------
+       Read is public (the app needs it); everything that costs money or
+       changes what people see is moderator-only.                        */
+    'GET /api/v1/sponsors': (req, body, ip, url) => {
+      const lat = Number(url.searchParams.get('lat')), lng = Number(url.searchParams.get('lng'));
+      if (isNaN(lat) || isNaN(lng)) bad(400, 'lat and lng are required');
+      const t = now(), pad = 0.05;                       // ~5km box, filtered properly client-side
+      const rows = q.liveSponsors.all(t, t, lat-pad, lat+pad, lng-pad, lng+pad);
+      return {sponsors: rows.map(s => ({
+        id:s.id, placeId:s.place_id, business:s.business, headline:s.headline,
+        body:s.body, cta:s.cta, lat:s.lat, lng:s.lng, radius:s.radius}))};
+    },
+
+    /* Billing runs off these two. Impressions are cheap and frequent, so
+       they are fire-and-forget; a click is the thing worth arguing over. */
+    'POST /api/v1/sponsors/impression': (req, body, ip) => {
+      const s = q.sponsorById.get(String(body.id || ''));
+      if (!s || s.status !== 'live') return {ok:false};
+      if (!rateLimit('imp:' + ip + ':' + s.id, 60, 3600000)) return {ok:false, throttled:true};
+      q.countImpression.run(s.id);
+      return {ok:true};
+    },
+    'POST /api/v1/sponsors/click': (req, body, ip) => {
+      const s = q.sponsorById.get(String(body.id || ''));
+      if (!s || s.status !== 'live') return {ok:false};
+      if (!rateLimit('clk:' + ip + ':' + s.id, 20, 3600000)) return {ok:false, throttled:true};
+      q.countClick.run(s.id);
+      return {ok:true};
+    },
+
+    /* A business asking to advertise. No auth — it is a contact form. */
+    'POST /api/v1/lead': (req, body, ip) => {
+      if (!rateLimit('lead:' + ip, 10, 3600000)) bad(429, 'Too many enquiries from here');
+      const business = String(body.business || '').trim().slice(0, 120);
+      const contact  = String(body.contact  || '').trim().slice(0, 200);
+      if (!business || !contact) bad(400, 'A business name and a way to reach you are both needed');
+      q.insLead.run(uid('lead'), business, contact, String(body.note || '').slice(0, 1000),
+        body.lat == null ? null : Number(body.lat), body.lng == null ? null : Number(body.lng), now());
+      return {ok:true};
+    },
+
+    'POST /api/v1/moderation/sponsor': (req, body) => {
+      needAdmin(req);
+      if (body.id && body.status){
+        if (!['pending','live','paused','ended'].includes(body.status)) bad(400, 'Unknown status');
+        if (!q.sponsorById.get(body.id)) bad(404, 'No such campaign');
+        q.setSponsorStatus.run(body.status, body.id);
+        return {ok:true, id:body.id, status:body.status};
+      }
+      const required = ['business','headline','lat','lng'];
+      for (const k of required) if (body[k] == null || body[k] === '') bad(400, `${k} is required`);
+      const id = uid('sp');
+      q.insSponsor.run(id, body.placeId || null, String(body.business).slice(0,120),
+        String(body.headline).slice(0,120), String(body.body || '').slice(0,300),
+        String(body.cta || 'Directions').slice(0,40),
+        Number(body.lat), Number(body.lng), Number(body.radius) || 1500,
+        body.status === 'live' ? 'live' : 'pending',
+        Math.round(Number(body.cpmCents) || 0), Math.round(Number(body.cpcCents) || 0),
+        Math.round(Number(body.budgetCents) || 0),
+        String(body.contact || '').slice(0,200),
+        body.starts ? Number(body.starts) : null, body.ends ? Number(body.ends) : null, now());
+      return {ok:true, id};
+    },
+    'GET /api/v1/moderation/revenue': req => {
+      needAdmin(req);
+      const r = q.revenue.get();
+      return {
+        ...r,
+        revenue: '$' + (r.revenue_cents/100).toFixed(2),
+        ctr: r.impressions ? +(r.clicks / r.impressions * 100).toFixed(2) : 0,
+        campaigns: q.allSponsors.all().map(s => ({
+          id:s.id, business:s.business, headline:s.headline, status:s.status,
+          impressions:s.impressions, clicks:s.clicks,
+          ctr: s.impressions ? +(s.clicks/s.impressions*100).toFixed(2) : 0,
+          spent: '$' + (s.spent_cents/100).toFixed(2),
+          budget: '$' + (s.budget_cents/100).toFixed(2)})),
+        leads: q.allLeads.all().map(l => ({
+          id:l.id, business:l.business, contact:l.contact, note:l.note,
+          at:l.created, handled:!!l.handled}))
+      };
     },
 
     /* ---- moderator ---- */

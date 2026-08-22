@@ -3,14 +3,14 @@
 
    Bump APP_VERSION to ship an update. Clients notice the new worker,
    show "Update ready", and swap over on tap.                          */
-const APP_VERSION = 'v1.4.2';
+const APP_VERSION = 'v1.4.3';
 const SHELL = `shell-${APP_VERSION}`;
 const TILES = 'tiles-v1';
 const MODELS = 'models-v1';
 
 const SHELL_FILES = [
   './', './index.html', './styles.css', './lib.js', './app.js',
-  './moderation.js', './rentals.js', './sync.js', './manifest.webmanifest',
+  './moderation.js', './rentals.js', './sync.js', './ads.js', './manifest.webmanifest',
   './check.html',
   './icon-192.png', './icon-512.png',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
