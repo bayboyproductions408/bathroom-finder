@@ -21,12 +21,27 @@
 const TILE = 0.02;
 /* OSM changes slowly and a stale shop is far better than no map at all. */
 const TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/* An empty answer is not trusted for anything like as long. Upstream can
+   return "200, zero elements" for reasons that have nothing to do with the
+   place being empty — a timeout swallowed server-side, or a mirror that only
+   holds one country. Caching that for a month turns a transient hiccup into a
+   neighbourhood that stays blank. A day is long enough to stop hammering a
+   genuinely quiet area and short enough to self-heal. */
+const EMPTY_TTL_MS = 24 * 60 * 60 * 1000;
 /* A zoomed-out request could otherwise ask for hundreds of tiles at once. */
 const MAX_TILES = 24;
 
+/* Only general-purpose instances belong here, and each one was probed rather
+   than assumed. kumi.systems, private.coffee and osm.jp all refused the
+   connection outright from this network.
+
+   overpass.osm.ch is deliberately absent despite answering HTTP 200: it is a
+   Switzerland-only instance, so a Seattle query returns 200 with zero
+   elements. A regional mirror in a fallback list is worse than no fallback,
+   because "success, nothing here" is indistinguishable from an empty
+   neighbourhood and gets cached as fact. */
 const ENDPOINTS = [
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter'   /* no CORS, but we are not a browser */
+  'https://overpass-api.de/api/interpreter'
 ];
 
 const tileKey = (lat, lng) =>
@@ -140,7 +155,9 @@ async function placesIn(q, {s, w, n, e}, opts = {}){
 
   for (const t of tiles){
     const row = await q.tileGet.get(t);
-    if (row && (nowMs - row.fetched) < TTL_MS) fresh.add(t);
+    if (!row) continue;
+    const ttl = row.count > 0 ? TTL_MS : EMPTY_TTL_MS;
+    if ((nowMs - row.fetched) < ttl) fresh.add(t);
   }
 
   let fetchedTiles = 0, stale = false;
@@ -148,12 +165,22 @@ async function placesIn(q, {s, w, n, e}, opts = {}){
     try {
       const elements = await askOverpass(s, w, n, e, fetchImpl);
       const seen = new Set();
+      const rows = [];
       for (const el of elements){
         const p = classify(el);
         if (!p || seen.has(p.id)) continue;
         seen.add(p.id);
-        await q.poiPut.run(p.id, tileKey(p.lat, p.lng), p.cat, p.lat, p.lng,
-                           p.name, p.sub, JSON.stringify(p.tags), nowMs);
+        rows.push([p.id, tileKey(p.lat, p.lng), p.cat, p.lat, p.lng,
+                   p.name, p.sub, JSON.stringify(p.tags), nowMs]);
+      }
+      /* Chunked rather than one row at a time: against a networked database
+         each statement is a round trip, and 400 of them is slower than the
+         Overpass query that produced them. 100 keeps the parameter count well
+         inside SQLite's limit. */
+      if (q.poiPutMany){
+        for (let i = 0; i < rows.length; i += 100) await q.poiPutMany(rows.slice(i, i + 100));
+      } else {
+        for (const r of rows) await q.poiPut.run(...r);
       }
       /* Mark every requested tile fetched, including the ones that came back
          empty. Without that, a quiet suburb is re-queried on every pan. */
@@ -180,4 +207,5 @@ async function placesIn(q, {s, w, n, e}, opts = {}){
   };
 }
 
-module.exports = { placesIn, classify, tilesFor, tileKey, buildQuery, TILE, TTL_MS, MAX_TILES };
+module.exports = { placesIn, classify, tilesFor, tileKey, buildQuery,
+                   TILE, TTL_MS, EMPTY_TTL_MS, MAX_TILES };

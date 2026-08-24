@@ -183,6 +183,28 @@ function createAPI({file, adminToken, url, authToken}){
                            tags=excluded.tags, fetched=excluded.fetched`),
     poisIn:  db.prepare(`SELECT * FROM pois
                          WHERE lat BETWEEN ? AND ? AND lng BETWEEN ? AND ? LIMIT 900`),
+    /* Turso is a network hop, so inserting 400 places one statement at a time
+       is 400 round trips — slow enough on a free tier to blow the request
+       budget entirely. One statement per chunk instead. Statements are
+       memoised by row count because there are only a handful of shapes. */
+    poiPutMany: (() => {
+      const cache = new Map();
+      return rows => {
+        if (!rows.length) return Promise.resolve();
+        let stmt = cache.get(rows.length);
+        if (!stmt){
+          const tuples = Array(rows.length).fill('(?,?,?,?,?,?,?,?,?)').join(',');
+          stmt = db.prepare(`INSERT INTO pois(id, tile, cat, lat, lng, name, sub, tags, fetched)
+                             VALUES ${tuples}
+                             ON CONFLICT(id) DO UPDATE SET
+                               name=excluded.name, sub=excluded.sub, cat=excluded.cat,
+                               lat=excluded.lat, lng=excluded.lng, tile=excluded.tile,
+                               tags=excluded.tags, fetched=excluded.fetched`);
+          cache.set(rows.length, stmt);
+        }
+        return stmt.run(...rows.flat());
+      };
+    })(),
     tileGet: db.prepare('SELECT * FROM tiles_fetched WHERE tile = ?'),
     tilePut: db.prepare(`INSERT INTO tiles_fetched(tile, fetched, count) VALUES (?,?,?)
                          ON CONFLICT(tile) DO UPDATE SET fetched=excluded.fetched, count=excluded.count`),

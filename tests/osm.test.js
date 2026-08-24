@@ -145,3 +145,28 @@ test('the query Overpass receives asks for named businesses, not just toilets', 
   assert.ok(qy.includes('healthcare'), 'healthcare included');
   assert.ok(/\["name"\]/.test(qy), 'name filter is what keeps this affordable');
 });
+
+test('an empty answer is distrusted quickly, a full one is kept', async () => {
+  const {q} = await freshDb();
+  const empty = fakeOverpass([]);
+  const t0 = Date.now();
+  await osm.placesIn(q, BOX, {fetch: empty, now: t0});
+
+  /* Still cached an hour later — a genuinely quiet area must not be hammered */
+  await osm.placesIn(q, BOX, {fetch: empty, now: t0 + 60 * 60 * 1000});
+  assert.strictEqual(empty.calls.length, 1, 'quiet areas should not be re-queried constantly');
+
+  /* But re-checked the next day, because "200, zero elements" is exactly what
+     a swallowed upstream timeout looks like — and what a region-limited mirror
+     returns for the wrong continent. Trusting that for a month would leave a
+     real neighbourhood permanently blank. */
+  await osm.placesIn(q, BOX, {fetch: empty, now: t0 + osm.EMPTY_TTL_MS + 1000});
+  assert.strictEqual(empty.calls.length, 2, 'an empty result must expire within a day');
+
+  /* A result with actual places is trusted for the long TTL */
+  const full = fakeOverpass(ELEMENTS);
+  const t1 = t0 + osm.EMPTY_TTL_MS + 2000;
+  await osm.placesIn(q, BOX, {fetch: full, now: t1});
+  await osm.placesIn(q, BOX, {fetch: full, now: t1 + osm.EMPTY_TTL_MS + 1000});
+  assert.strictEqual(full.calls.length, 1, 'a populated tile keeps the long TTL');
+});
