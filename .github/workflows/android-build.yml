@@ -60,7 +60,15 @@ jobs:
         run: npm remove @capacitor-community/admob --no-save || true
 
       - name: Generate the Android project
-        run: npx cap add android || echo "android/ already exists"
+        # No "|| true" here. Swallowing this hid a real failure once: android/
+        # existed (a stray committed .gitignore), cap add refused in 0s, and the
+        # run carried on to fail three steps later with a misleading message.
+        run: |
+          npx cap add android
+          test -f android/app/build.gradle || {
+            echo "::error::cap add android produced no project — is android/ already present?"
+            exit 1
+          }
 
       - name: Patch signing, version and icon
         env:

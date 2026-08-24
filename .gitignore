@@ -9,6 +9,7 @@ certs/
 # so they are never committed. The signing material inside android/ is ignored
 # separately above and must survive.
 /ios/
+/android/.gitignore
 /android/app/
 /android/build.gradle
 /android/gradle.properties

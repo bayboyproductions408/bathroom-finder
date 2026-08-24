@@ -70,7 +70,13 @@ jobs:
         run: npm remove @capacitor-community/admob --no-save || true
 
       - name: Generate the iOS project
-        run: npx cap add ios || echo "ios/ already exists"
+        # Same reasoning as the Android job: do not swallow this.
+        run: |
+          npx cap add ios
+          test -f ios/App/App.xcodeproj/project.pbxproj || {
+            echo "::error::cap add ios produced no project — is ios/ already present?"
+            exit 1
+          }
 
       - name: Patch Info.plist, the icon, and the backend URL
         env:
