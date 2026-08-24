@@ -228,7 +228,13 @@ async function loadArea(auto){
     });
     if (r.ok){
       const j = await r.json();
-      if (Array.isArray(j.places)){
+      /* Only treat this as the answer if it actually is one. The backend
+         replies 200 with stale:true and an empty list when it could not reach
+         upstream and had nothing cached — accepting that would leave the user
+         staring at a blank map while a perfectly good direct route to
+         OpenStreetMap goes untried. A stale answer WITH places is still worth
+         having; a stale empty one is not an answer at all. */
+      if (Array.isArray(j.places) && (j.places.length || !j.stale)){
         loading = false;
         el('status').style.pointerEvents = 'none';
         fetched.push(b);
