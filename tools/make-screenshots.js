@@ -212,7 +212,11 @@ async function main(){
             if (!document.getElementById('shotcss')){
               const st = document.createElement('style');
               st.id = 'shotcss';
-              st.textContent = '#toasts{display:none !important}';
+              /* #status is the dark pill that says "Loading bathrooms
+                 nearby..." — it is NOT a toast, which is why hiding the
+                 toast container alone left it sitting across the middle of
+                 every shot. Both go. */
+              st.textContent = '#toasts,#status{display:none !important}';
               document.head.appendChild(st);
               n++;
             }

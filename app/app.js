@@ -144,17 +144,36 @@ const TILE_LIGHT = 'https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 const TILE_DARK  = 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 let map, tiles, markerLayer, hostRings, meMarker;
 
+/* Where the map was when the app was last closed. A returning user should not
+   have to watch the globe spin in from zoom 2 while the GPS fix lands. */
+function lastView(){
+  try {
+    const v = JSON.parse(localStorage.getItem('bf.lastview') || 'null');
+    if (v && Number.isFinite(v.lat) && Number.isFinite(v.lng) && Number.isFinite(v.z)) return v;
+  } catch(e){}
+  return null;
+}
+function rememberView(){
+  if (!map) return;
+  try {
+    const c = map.getCenter();
+    localStorage.setItem('bf.lastview',
+      JSON.stringify({lat:+c.lat.toFixed(5), lng:+c.lng.toFixed(5), z:map.getZoom()}));
+  } catch(e){}
+}
+
 function initMap(){
+  const last = lastView();
   map = L.map('map', {zoomControl:false, worldCopyJump:true, minZoom:2, maxZoom:19,
                       preferCanvas:false, attributionControl:true})
-        .setView([20, 0], 2);
+        .setView(last ? [last.lat, last.lng] : [20, 0], last ? last.z : 2);
   tiles = L.tileLayer(document.documentElement.getAttribute('data-theme') === 'dark' ? TILE_DARK : TILE_LIGHT, {
     maxZoom:19, detectRetina:true,
     attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
   }).addTo(map);
   markerLayer = L.layerGroup().addTo(map);
   hostRings = L.layerGroup().addTo(map);
-  map.on('moveend', () => { state.center = map.getCenter(); scheduleLoad(); renderList(); });
+  map.on('moveend', () => { state.center = map.getCenter(); rememberView(); scheduleLoad(); renderList(); });
   map.on('zoomend', () => { scheduleLoad(); renderMarkers(); });
   state.center = map.getCenter();
 }
@@ -2130,7 +2149,7 @@ function locate(){
   watchId = navigator.geolocation.watchPosition(
     pos => {
       state.me = {lat:pos.coords.latitude, lng:pos.coords.longitude, acc:pos.coords.accuracy};
-      if (first){ map.setView([state.me.lat, state.me.lng], 17); first = false;
+      if (first){ map.setView([state.me.lat, state.me.lng], 16); first = false;
                   status(`Found you — accurate to about ${Math.round(pos.coords.accuracy)} m`, 3200); }
       if (accuracyRing) map.removeLayer(accuracyRing);
       if (pos.coords.accuracy && pos.coords.accuracy > 25)
@@ -2147,6 +2166,28 @@ function locate(){
     },
     {enableHighAccuracy:true, timeout:12000, maximumAge:15000}
   );
+}
+
+/* Ask for location the moment the app opens, and go straight there.
+
+   Opening on the world view and waiting for a tap on the crosshair put three
+   actions between launch and seeing anything useful: open, tap, approve. The
+   app is about what is around you right now, so it asks immediately.
+
+   This cannot become a dialog on every launch. A browser remembers a denial
+   and will not re-prompt, and on iOS the system asks once per install. Where
+   the Permissions API exists we check first and stay silent if the answer is
+   already no, so a user who declined is not handed an error toast they did
+   not ask for on every visit. */
+async function autoLocate(){
+  if (!navigator.geolocation || !window.isSecureContext) return;
+  try {
+    if (navigator.permissions && navigator.permissions.query){
+      const p = await navigator.permissions.query({name:'geolocation'});
+      if (p.state === 'denied') return;
+    }
+  } catch(e){ /* Permissions API is optional — fall through and just ask */ }
+  locate();
 }
 
 /* ---------- chrome: panels, modal, toast, sheet ---------- */
@@ -2283,6 +2324,9 @@ function boot(){
   el('btn-theme').addEventListener('click', () =>
     applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
   el('btn-locate').addEventListener('click', locate);
+  /* Do this after the listeners exist, so the status and crosshair states
+     the fix drives are already wired up when it lands. */
+  autoLocate();
   el('btn-add').addEventListener('click', () => startDropMode('add', pt => openAddForm(pt)));
   el('drop-cancel').addEventListener('click', endDropMode);
   el('drop-confirm').addEventListener('click', () => {
