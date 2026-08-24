@@ -79,3 +79,27 @@ of relying on cloud signing — a direct port of the Flappy Birdies step.
   TestFlight regardless, and the sponsored-listing slot is untouched)
 - credentials verified independently by signing a JWT and calling the API —
   both keys return HTTP 200, so authentication was never the problem
+
+---
+
+## Where the signing material lives (2026-08-24)
+
+Both keys are on this machine only. Neither is in the repository, and neither
+should ever be.
+
+| What | Where |
+|---|---|
+| iOS distribution certificate | `dev-tools/ios-signing/flappy-birdies/ios_distribution.p12` |
+| …its password | `p12_password.txt` beside it |
+| App Store Connect API keys | `AuthKey_399645T965.p8` (Developer) and `~/Downloads/AuthKey_AGJ7NZ5M93.p8` (App Manager) |
+| **Android upload keystore** | **`dev-tools/android-signing/bathroom-finder/upload-keystore.jks`** |
+| …its passwords and alias | `keystore.properties` beside it — alias `bathroomfinder-upload` |
+
+The Android keystore was previously only inside `android/`, which is generated
+and wiped by `npx cap add android`. It survived that once because it had been
+copied to a temp folder first, which is not a plan. It now lives in dev-tools
+next to the iOS material, and `android/` holds a working copy.
+
+**Losing the upload keystore means losing the ability to update the app on Play
+once it is published.** Back up `dev-tools/android-signing/` somewhere off this
+machine before the first Play release, not after.
