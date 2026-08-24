@@ -110,7 +110,11 @@ const Ads = (() => {
     if (network){ bumpFreq(); return {...network, kind:'network'}; }
 
     /* rotate house ads so it is not the same one every time */
-    const h = HOUSE[Math.floor(Date.now()/60000) % HOUSE.length];
+    /* Do not advertise a door that is bolted. Filtering here rather than
+       editing HOUSE keeps the entry ready for when Plus actually ships. */
+    const f = window.BF_FEATURES || {};
+    const pool = HOUSE.filter(x => x.action !== 'plus' || f.plus);
+    const h = pool[Math.floor(Date.now()/60000) % pool.length];
     bumpFreq();
     return {...h};
   }

@@ -7,6 +7,23 @@
    ===================================================================== */
 'use strict';
 
+/* ---------- what ships in 1.0 ----------
+   Two features are built and working as prototypes, and both take a payment
+   that is not connected to anything. Renting shows simulated cards ("Visa
+   ****4242"), says "payment held" and "Payment taken", and moves no money.
+   Plus grants itself by writing localStorage and its own button read "Turn
+   Plus off (test build)".
+
+   App Review rejects demos, betas and placeholder functionality under
+   Guideline 2.1, and a fake card-payment screen is the clearest example of
+   it there is. Neither is deleted — the code and its tests stay exactly
+   where they are. The doors are shut until the billing behind them is real,
+   which is a one-line change here.                                        */
+const FEATURES = { rentals: false, plus: false };
+/* ads.js loads before this file, so it cannot see the const directly. It
+   only reads the flag at render time, by which point this has run. */
+window.BF_FEATURES = FEATURES;
+
 /* ---------- icons ---------- */
 const I = {
   star:f=>`<svg viewBox="0 0 24 24" width="14" height="14" fill="${f?'currentColor':'none'}" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="m12 3.8 2.5 5.1 5.6.8-4.05 3.95.96 5.6L12 16.6l-5.01 2.65.96-5.6L3.9 9.7l5.6-.8L12 3.8Z"/></svg>`,
@@ -1592,6 +1609,7 @@ function renderProfile(){
       <div class="stat"><b class="num">${store.hosts.filter(h=>!h.sample).length}</b><span>Listings</span></div>
       <div class="stat"><b class="num">${confirms}</b><span>Confirmations</span></div>
     </div>
+    ${!FEATURES.rentals ? '' : `
     <div class="section">
       <h2>Renting</h2>
       <div class="card" style="padding:4px 14px">
@@ -1604,7 +1622,7 @@ function renderProfile(){
           <span><h3>Host console</h3><span class="meta">Answer requests and take payment</span></span>
           <span class="tail"><span class="dist num">${store.bookings.filter(b=>b.status==='requested').length}</span></span></button>
       </div>
-    </div>
+    </div>`}
     <div class="section">
       <h2>Safety</h2>
       <div class="card" style="padding:4px 14px">
@@ -1617,10 +1635,11 @@ function renderProfile(){
     <div class="section">
       <h2>Support the app</h2>
       <div class="card" style="padding:4px 14px">
+        ${!FEATURES.plus ? '' : `
         <button class="row navrow" data-nav="plus">
           <span class="ico" style="background:var(--accent-soft); color:var(--accent)">${I.sparkle}</span>
           <span><h3>Bathroom Finder Plus</h3><span class="meta">${Ads.isPlus() ? 'Active — no ads' : 'Remove ads, offline city packs'}</span></span>
-          <span class="tail">${I.back}</span></button>
+          <span class="tail">${I.back}</span></button>`}
         <button class="row navrow" data-nav="advertise">
           <span class="ico" style="background:var(--code-soft); color:var(--code)">${I.coin}</span>
           <span><h3>Advertise your business</h3><span class="meta">Reach people looking for a bathroom nearby</span></span>
@@ -1675,11 +1694,13 @@ function renderProfile(){
     </div>`;
   el('profile-body').querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => {
     const n = b.dataset.nav;
-    if (n === 'bookings'){ renderBookings(); openPanel('bookings'); }
-    else if (n === 'console'){ renderHostConsole(); openPanel('console'); }
+    /* Guarded as well as hidden: a stale rendered panel or a keyboard path
+       should not be able to reach a flow the build does not ship. */
+    if (n === 'bookings' && FEATURES.rentals){ renderBookings(); openPanel('bookings'); }
+    else if (n === 'console' && FEATURES.rentals){ renderHostConsole(); openPanel('console'); }
     else if (n === 'moderation'){ renderModeration(); openPanel('moderation'); }
     else if (n === 'feedback') openFeedback();
-    else if (n === 'plus') openPlus();
+    else if (n === 'plus' && FEATURES.plus) openPlus();
     else if (n === 'advertise') openAdvertise();
   }));
   el('p-rename').addEventListener('click', () => {
@@ -1778,6 +1799,10 @@ function openAdvertise(){
 }
 
 function openPlus(){
+  /* Unreachable while FEATURES.plus is false — the nav row is not rendered
+     and the dispatch is guarded. Guarded here too so that stays true if
+     someone wires up a new caller without reading the flag. */
+  if (!FEATURES.plus) return;
   const plus = Ads.isPlus();
   openModal(`
     <h2>Bathroom Finder Plus</h2>
