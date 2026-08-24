@@ -55,6 +55,7 @@ jobs:
           echo "token present (${#ADMIN_TOKEN} chars)"
 
       - name: Warm the cache
+        id: warm
         env:
           API_BASE: ${{ vars.API_BASE || 'https://bathroom-finder.onrender.com' }}
           ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
@@ -67,13 +68,20 @@ jobs:
         env:
           API_BASE: ${{ vars.API_BASE || 'https://bathroom-finder.onrender.com' }}
         run: |
-          # Downtown LA, which the warmer covers. Proves the cache is readable,
-          # not just writable — a warm job that stores into a hole nobody reads
-          # would look perfectly green.
-          curl -s --max-time 60 \
-            "$API_BASE/api/v1/osm?bbox=34.0400,-118.2550,34.0650,-118.2300" \
+          # Read back a box THIS run warmed, which the previous step reported.
+          # Checking a fixed location instead warns falsely whenever the daily
+          # rotation is elsewhere in the list — which is what the first run did.
+          BBOX="${{ steps.warm.outputs.bbox }}"
+          if [ -z "$BBOX" ]; then
+            echo "warmer reported no box — nothing to read back"; exit 0
+          fi
+          echo "reading back ${{ steps.warm.outputs.city }} $BBOX"
+          curl -s --max-time 60 "$API_BASE/api/v1/osm?bbox=$BBOX" \
             | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{
                 const j=JSON.parse(d);
                 console.log('places='+j.places.length+' cached='+j.cached+' fetched='+j.fetchedTiles+' stale='+j.stale);
-                if (j.places.length === 0) console.log('::warning::cache still empty for downtown LA');
+                // Warmed a moment ago, so this must be served wholly from cache.
+                // Anything else means the write and the read disagree about keys.
+                if (j.places.length === 0) console.log('::warning::warmed this box but read back nothing');
+                else if (j.fetchedTiles > 0) console.log('::warning::had to hit Overpass for a box just warmed');
               });"

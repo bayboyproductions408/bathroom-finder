@@ -18,6 +18,7 @@
    Needs API_BASE and ADMIN_TOKEN in the environment.                        */
 'use strict';
 const osm = require('../server/osm.js');
+const fs = require('fs');
 
 const API_BASE = (process.env.API_BASE || 'https://bathroom-finder.onrender.com').replace(/\/$/, '');
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
@@ -54,13 +55,15 @@ function boxesFor(city){
     for (let dx = -city.rings; dx <= city.rings; dx++){
       const lat = city.lat + dy * BOX, lng = city.lng + dx * BOX;
       out.push({
-        city: city.name,
+        city: city.name, ring: Math.max(Math.abs(dy), Math.abs(dx)),
         s: +(lat - BOX / 2).toFixed(4), n: +(lat + BOX / 2).toFixed(4),
         w: +(lng - BOX / 2).toFixed(4), e: +(lng + BOX / 2).toFixed(4)
       });
     }
   }
-  return out;
+  /* Centre first, then outwards. A half-finished city should be warm where
+     people actually are, not warm around the edges with a hole downtown. */
+  return out.sort((a, b) => a.ring - b.ring);
 }
 
 const ALL = CITIES.flatMap(boxesFor);
@@ -89,7 +92,7 @@ async function main(){
   for (let i = 0; i < Math.min(limit, ALL.length); i++) batch.push(ALL[(offset + i) % ALL.length]);
 
   console.log(`warming ${batch.length} of ${ALL.length} boxes (offset ${offset}) -> ${API_BASE}`);
-  let okCount = 0, failCount = 0, placeCount = 0;
+  let okCount = 0, failCount = 0, placeCount = 0, firstWarmed = null;
 
   for (const box of batch){
     const label = `${box.city} ${box.s},${box.w}`;
@@ -111,6 +114,7 @@ async function main(){
         console.log(`  ok   ${label.padEnd(30)} ${places.length} places -> ${j.stored} stored, ${j.tiles} tiles`);
       }
       okCount++;
+      if (!firstWarmed) firstWarmed = box;
     } catch(err){
       failCount++;
       console.log(`  fail ${label.padEnd(30)} ${err.message}`);
