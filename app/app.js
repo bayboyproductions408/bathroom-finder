@@ -124,7 +124,8 @@ const community = id => (store.community[id] = store.community[id] ||
 
 /* ---------- state ---------- */
 const features = new Map();
-const state = {cats:new Set(['toilets','food','lodging','shop','fuel','civic','host']), attrs:new Set(),
+const state = {cats:new Set(['toilets','food','lodging','shop','fuel','civic',
+                             ...(FEATURES.rentals ? ['host'] : [])]), attrs:new Set(),
                sort:'dist', center:null, me:null, sel:null, dropMode:null, panel:null, listCache:[],
                sponsors:[], currentAd:null, listSignature:null};
 const fetched = [];
@@ -502,7 +503,11 @@ function hydrateCache(){
 function localFeatures(){
   const out = [];
   for (const l of store.local) out.push({...l, source:'local', tags:l.tags || {}});
-  for (const h of store.hosts) out.push({...h, source:'host', cat:'host', tags:h.tags || {}});
+  /* Rented bathrooms are only real if renting is on. Leaving them on the map
+     with the flow switched off would put pins on the map that dead-end when
+     tapped, which is worse than not showing them at all. */
+  if (FEATURES.rentals)
+    for (const h of store.hosts) out.push({...h, source:'host', cat:'host', tags:h.tags || {}});
   return out;
 }
 function allFeatures(){ return [...features.values(), ...localFeatures()]; }
@@ -515,6 +520,12 @@ function hostDisplayPoint(h){
           lng: h.lng + (r*Math.sin(ang))/(111320*Math.cos(h.lat*Math.PI/180))};
 }
 function seedSamplesNear(center){
+  /* These are invented listings — made-up hosts, made-up prices — dropped a
+     couple of hundred metres from wherever the user actually is. They exist
+     to make the rental flow demonstrable. With renting off they would be
+     fabricated places presented on the map as real ones, so they must not
+     be created at all. */
+  if (!FEATURES.rentals) return;
   if (store.seeded || !center) return;
   const names = [
     {name:'Ground-floor guest bath', host:'Ana', price:2, note:'Right by the front door, you never come through the living room. Clean towel every time.'},
@@ -2204,11 +2215,21 @@ function initSheet(){
   });
 }
 function renderChips(){
-  const cats = Object.entries(CATS).map(([k,v]) =>
+  /* "Rentable" filters the map down to rented bathrooms, which do not exist
+     in a build with renting switched off — an empty filter that always
+     returns nothing reads as a broken app. */
+  const shown = Object.entries(CATS).filter(([k]) => k !== 'host' || FEATURES.rentals);
+  const cats = shown.map(([k,v]) =>
     `<button class="chip" data-cat="${k}" aria-pressed="${state.cats.has(k)}"><span class="dot" style="background:${v.color}"></span>${v.label}</button>`).join('');
   const attrs = Object.entries(ATTRS).map(([k,v]) =>
     `<button class="chip" data-attr="${k}" aria-pressed="${state.attrs.has(k)}">${v.label}</button>`).join('');
   el('chips').innerHTML = cats + attrs;
+  /* The tab is static markup in index.html, so it has to be removed here
+     rather than simply not rendered. */
+  if (!FEATURES.rentals){
+    const hostTab = document.querySelector('.tab[data-go="host"]');
+    if (hostTab) hostTab.hidden = true;
+  }
   el('chips').querySelectorAll('[data-cat]').forEach(c => c.addEventListener('click', () => {
     const k = c.dataset.cat;
     state.cats.has(k) ? state.cats.delete(k) : state.cats.add(k);
@@ -2264,7 +2285,7 @@ function boot(){
     else if (go === 'list'){ closePanel(); el('sheet').dataset.state = 'full'; }
     else if (go === 'saved'){ renderSaved(); openPanel('saved'); }
     else if (go === 'profile'){ renderProfile(); openPanel('profile'); }
-    else if (go === 'host'){ renderHostForm(); openPanel('host'); }
+    else if (go === 'host' && FEATURES.rentals){ renderHostForm(); openPanel('host'); }
   }));
   document.querySelectorAll('[data-close-panel]').forEach(b => b.addEventListener('click', closePanel));
   el('veil').addEventListener('click', closeModal);
