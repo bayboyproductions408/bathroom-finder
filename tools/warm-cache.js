@@ -132,6 +132,17 @@ async function main(){
   }
 
   console.log(`\n${okCount} ok, ${failCount} failed, ${placeCount} places seen`);
+
+  /* Hand back a box this run actually warmed, so the job can read it straight
+     back. Checking a fixed location instead reports a false alarm whenever the
+     rotation happens to be elsewhere — which is what the first run did. */
+  if (firstWarmed && process.env.GITHUB_OUTPUT){
+    const bbox = [firstWarmed.s, firstWarmed.w, firstWarmed.n, firstWarmed.e].join(',');
+    fs.appendFileSync(process.env.GITHUB_OUTPUT, `bbox=${bbox}
+city=${firstWarmed.city}
+`);
+    console.log(`reporting ${firstWarmed.city} ${bbox} for the read-back check`);
+  }
   /* A partial run is a good run — some boxes warmed beats none, and failing
      the job would only send a red email about a cache that is still fine. */
   if (okCount === 0 && batch.length > 0){
