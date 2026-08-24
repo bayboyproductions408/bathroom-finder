@@ -2251,31 +2251,77 @@ function toast(msg, icon){
   setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 250); }, 2500);
 }
 function initSheet(){
-  const sheet = el('sheet'), grab = el('grab');
-  const peek = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sheet-peek')) || 210;
-  const maxT = () => sheet.offsetHeight - peek();
-  const curT = () => sheet.dataset.state === 'full' ? 0 : maxT();
-  let dragging = false, startY = 0, startT = 0, moved = 0, lastT = 0;
-  grab.addEventListener('pointerdown', e => {
-    dragging = true; moved = 0; startY = e.clientY; startT = curT(); lastT = startT;
-    sheet.classList.add('dragging'); grab.setPointerCapture && grab.setPointerCapture(e.pointerId);
-  });
+  const sheet = el('sheet'), grab = el('grab'), list = el('sheet-list');
+  const head = sheet.querySelector('.sheet-head');
+  const peekPx = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sheet-peek')) || 210;
+  const maxT = () => sheet.offsetHeight - peekPx();
+
+  /* Three resting places, as translateY in pixels: fully up, halfway, and
+     peeking. Two was not enough — peek shows about one row, so reading the
+     list meant either a tap that swallowed the whole map or scrolling a
+     150px window. */
+  const stops = () => { const m = maxT(); return {full:0, half:m * 0.45, peek:m}; };
+  const nearest = t => {
+    const {full, half, peek} = stops();
+    if (t <= (full + half) / 2) return 'full';
+    if (t <= (half + peek) / 2) return 'half';
+    return 'peek';
+  };
+  const curT = () => stops()[sheet.dataset.state] ?? stops().peek;
+  const next = st => st === 'peek' ? 'half' : st === 'half' ? 'full' : 'peek';
+
+  let dragging = false, startY = 0, startT = 0, moved = 0, lastT = 0, fromList = false;
+
+  function begin(e, viaList){
+    dragging = true; fromList = !!viaList;
+    moved = 0; startY = e.clientY; startT = curT(); lastT = startT;
+    sheet.classList.add('dragging');
+  }
+
+  function startFromChrome(e){
+    /* The sort control is a button and must stay one. */
+    if (e.target.closest('button') && !e.target.closest('#grab')) return;
+    begin(e, false);
+    try { grab.setPointerCapture && grab.setPointerCapture(e.pointerId); } catch(err){}
+  }
+  grab.addEventListener('pointerdown', startFromChrome);
+  head.addEventListener('pointerdown', startFromChrome);
+
+  /* Pulling down while the list is already at its top lowers the sheet, the
+     way a native sheet behaves. Without this the only way back down is the
+     handle, and the sheet feels stuck once it is up. */
+  list.addEventListener('pointerdown', e => { if (list.scrollTop <= 0) begin(e, true); });
+
   window.addEventListener('pointermove', e => {
     if (!dragging) return;
-    const dy = e.clientY - startY; moved = Math.abs(dy);
+    const dy = e.clientY - startY;
+    moved = Math.abs(dy);
+    /* A drag that began in the list may only pull the sheet down. Pushing up
+       from there should scroll the list, so hand the gesture back. */
+    if (fromList && dy < 0){
+      dragging = false; fromList = false;
+      sheet.classList.remove('dragging'); sheet.style.transform = '';
+      return;
+    }
+    if (moved > 4 && e.cancelable) e.preventDefault();
     lastT = Math.min(Math.max(startT + dy, 0), maxT());
     sheet.style.transform = `translateY(${lastT}px)`;
-  });
+  }, {passive:false});
+
   const up = () => {
     if (!dragging) return;
-    dragging = false; sheet.classList.remove('dragging'); sheet.style.transform = '';
-    if (moved < 6) sheet.dataset.state = sheet.dataset.state === 'full' ? 'peek' : 'full';
-    else sheet.dataset.state = lastT < maxT()*0.45 ? 'full' : 'peek';
+    dragging = false;
+    sheet.classList.remove('dragging');
+    sheet.style.transform = '';
+    if (moved >= 6) sheet.dataset.state = nearest(lastT);
+    else if (!fromList) sheet.dataset.state = next(sheet.dataset.state);
+    fromList = false;
   };
   window.addEventListener('pointerup', up);
   window.addEventListener('pointercancel', up);
+
   grab.addEventListener('keydown', e => {
-    if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); sheet.dataset.state = sheet.dataset.state === 'full' ? 'peek' : 'full'; }
+    if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); sheet.dataset.state = next(sheet.dataset.state); }
   });
 }
 function renderChips(){
