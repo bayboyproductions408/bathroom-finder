@@ -30,7 +30,7 @@ const ELEMENTS = [
   {type:'node', id:4, lat:47.6096, lon:-122.3406, tags:{amenity:'bench'}}   /* unnamed: dropped */
 ];
 
-async function freshDb(){
+async function freshDb(limit = 900){
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bf-osm-'));
   const db = openLocal(path.join(dir, 'osm.db'));
   await db.exec(`
@@ -45,7 +45,11 @@ async function freshDb(){
                          ON CONFLICT(id) DO UPDATE SET name=excluded.name, sub=excluded.sub,
                            cat=excluded.cat, lat=excluded.lat, lng=excluded.lng,
                            tile=excluded.tile, tags=excluded.tags, fetched=excluded.fetched`),
-    poisIn:  db.prepare(`SELECT * FROM pois WHERE lat BETWEEN ? AND ? AND lng BETWEEN ? AND ? LIMIT 900`),
+    poisIn:  db.prepare(`SELECT * FROM pois
+                         WHERE lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?
+                         ORDER BY (lat - ?) * (lat - ?)
+                                + (lng - ?) * (lng - ?) * ?
+                         LIMIT ${limit}`),
     tileGet: db.prepare('SELECT * FROM tiles_fetched WHERE tile = ?'),
     tilePut: db.prepare(`INSERT INTO tiles_fetched(tile, fetched, count) VALUES (?,?,?)
                          ON CONFLICT(tile) DO UPDATE SET fetched=excluded.fetched, count=excluded.count`)
@@ -195,4 +199,49 @@ test('storePlaces refuses junk without poisoning the map', async () => {
     {id:'osm:node/2', lat:47.6090, lng:-122.3400, cat:'shop', name:'Duplicate'}
   ]);
   assert.strictEqual(r.stored, 1, 'only the one valid, non-duplicate place');
+});
+
+test('when more places fit than the cap allows, the NEAR ones survive', async () => {
+  /* The cap is real: a dense downtown viewport holds more places than the
+     query returns. Without an ORDER BY the database may return any subset,
+     which in practice is insertion order — so the app would show a
+     confident "nearest" list assembled from an arbitrary slice, and the
+     bathroom across the street could simply be missing. */
+  const {q} = await freshDb(5);
+
+  /* Ten places on a line running away from the viewport centre. The five
+     nearest are deliberately inserted LAST, so insertion order gets it
+     exactly backwards. */
+  const centre = {s: 47.600, w: -122.350, n: 47.620, e: -122.330};
+  const cLat = 47.610, cLng = -122.340;
+  const far  = [];
+  for (let i = 10; i >= 6; i--) far.push({id:'osm:node/f'+i, lat:cLat + i*0.0009, lng:cLng, cat:'shop', name:'far '+i});
+  const near = [];
+  for (let i = 1; i <= 5; i++) near.push({id:'osm:node/n'+i, lat:cLat + i*0.00001, lng:cLng, cat:'shop', name:'near '+i});
+  await osm.storePlaces(q, centre, [...far, ...near]);
+
+  const never = async () => { throw new Error('must not be called'); };
+  const r = await osm.placesIn(q, centre, {fetch: never});
+
+  assert.strictEqual(r.places.length, 5, 'the cap still applies');
+  const names = r.places.map(p => p.name).sort();
+  assert.deepStrictEqual(names, ['near 1','near 2','near 3','near 4','near 5'],
+    'the cap must trim the far edge, not whatever was written first');
+});
+
+test('longitude is discounted by latitude, so "nearest" is not stretched', async () => {
+  /* One degree of longitude is about two thirds of a degree of latitude at
+     47N. Comparing raw degrees would call the east place closer than it is. */
+  const {q} = await freshDb(1);
+  const centre = {s: 47.600, w: -122.350, n: 47.620, e: -122.330};
+  await osm.storePlaces(q, centre, [
+    {id:'osm:node/north', lat: 47.6108, lng: -122.3400, cat:'shop', name:'north'},
+    {id:'osm:node/east',  lat: 47.6100, lng: -122.3390, cat:'shop', name:'east'}
+  ]);
+  const never = async () => { throw new Error('must not be called'); };
+  const r = await osm.placesIn(q, centre, {fetch: never});
+  /* north is 0.0008 deg of latitude away, about 89m.
+     east is 0.0010 deg of longitude away, which at 47N is about 75m.
+     So east is genuinely nearer, and only the cos(lat) weighting sees that. */
+  assert.strictEqual(r.places[0].name, 'east', 'longitude must be scaled by cos(lat)');
 });

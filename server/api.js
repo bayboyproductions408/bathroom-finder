@@ -181,8 +181,20 @@ function createAPI({file, adminToken, url, authToken}){
                            name=excluded.name, sub=excluded.sub, cat=excluded.cat,
                            lat=excluded.lat, lng=excluded.lng, tile=excluded.tile,
                            tags=excluded.tags, fetched=excluded.fetched`),
+    /* The LIMIT is a real cap, not a formality — downtown LA holds more than
+       900 places in one viewport. Without an ORDER BY the database is free to
+       return any 900 of them, which in practice means insertion order: the
+       tile the warmer happened to write first. The client then picks its
+       "nearest" handful out of that arbitrary slice, so a bathroom across the
+       street can be dropped while ones half a mile away are shown. Order by
+       distance from the viewport centre so the cap trims the far edge.
+       The lng term is scaled by cos(lat)^2 because a degree of longitude is
+       shorter than a degree of latitude everywhere but the equator. */
     poisIn:  db.prepare(`SELECT * FROM pois
-                         WHERE lat BETWEEN ? AND ? AND lng BETWEEN ? AND ? LIMIT 900`),
+                         WHERE lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?
+                         ORDER BY (lat - ?) * (lat - ?)
+                                + (lng - ?) * (lng - ?) * ?
+                         LIMIT 900`),
     /* Turso is a network hop, so inserting 400 places one statement at a time
        is 400 round trips — slow enough on a free tier to blow the request
        budget entirely. One statement per chunk instead. Statements are

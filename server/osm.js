@@ -209,7 +209,14 @@ async function placesIn(q, {s, w, n, e}, opts = {}){
     }
   }
 
-  const rows = await q.poisIn.all(Math.min(s,n), Math.max(s,n), Math.min(w,e), Math.max(w,e));
+  /* Centre of the viewport, and how much to discount longitude at this
+     latitude, so the LIMIT above trims the farthest places rather than
+     whichever ones happen to sort first. */
+  const cLat = (s + n) / 2, cLng = (w + e) / 2;
+  const kx = Math.cos(cLat * Math.PI / 180) ** 2;
+  const rows = await q.poisIn.all(
+    Math.min(s,n), Math.max(s,n), Math.min(w,e), Math.max(w,e),
+    cLat, cLat, cLng, cLng, kx);
   return {
     places: rows.map(r => ({
       id: r.id, source: 'osm', cat: r.cat, lat: r.lat, lng: r.lng,
