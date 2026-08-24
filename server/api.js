@@ -15,6 +15,7 @@
    ===================================================================== */
 'use strict';
 const { openStore, tursoClientAvailable } = require('./db.js');
+const osm = require('./osm.js');
 const crypto = require('node:crypto');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -92,6 +93,27 @@ function open(opts){
       contact TEXT, starts INTEGER, ends INTEGER, created INTEGER NOT NULL);
     CREATE INDEX IF NOT EXISTS sponsors_live ON sponsors(status, lat, lng);
 
+    /* OpenStreetMap places, cached.
+
+       Every client used to query Overpass directly from the browser. Overpass
+       is a volunteer-run free service that rate-limits hard, so at any real
+       usage that means a slow, half-broken map for users and a lot of traffic
+       aimed at someone else's donated hardware. Caching here turns thousands
+       of identical requests for the same city block into one.
+
+       Keyed by tile so overlapping viewports share work. tiles_fetched records
+       that a tile was looked at even when it came back empty — otherwise empty
+       countryside is re-fetched forever. */
+    CREATE TABLE IF NOT EXISTS pois(
+      id TEXT PRIMARY KEY, tile TEXT NOT NULL, cat TEXT NOT NULL,
+      lat REAL NOT NULL, lng REAL NOT NULL, name TEXT NOT NULL, sub TEXT,
+      tags TEXT NOT NULL DEFAULT '{}', fetched INTEGER NOT NULL);
+    CREATE INDEX IF NOT EXISTS pois_bbox ON pois(lat, lng);
+    CREATE INDEX IF NOT EXISTS pois_tile ON pois(tile);
+
+    CREATE TABLE IF NOT EXISTS tiles_fetched(
+      tile TEXT PRIMARY KEY, fetched INTEGER NOT NULL, count INTEGER NOT NULL DEFAULT 0);
+
     /* Enquiries from businesses who want to advertise — the actual sales
        pipeline, and the thing worth checking every morning. */
     CREATE TABLE IF NOT EXISTS leads(
@@ -151,6 +173,19 @@ function createAPI({file, adminToken, url, authToken}){
                              VALUES (?,?,?,?,?,?,?,?,?,?)
                              ON CONFLICT(id) DO UPDATE SET name=excluded.name, cat=excluded.cat, tags=excluded.tags`),
     getPlace:    db.prepare('SELECT * FROM places WHERE id = ?'),
+
+    /* cached OpenStreetMap places */
+    poiPut:  db.prepare(`INSERT INTO pois(id, tile, cat, lat, lng, name, sub, tags, fetched)
+                         VALUES (?,?,?,?,?,?,?,?,?)
+                         ON CONFLICT(id) DO UPDATE SET
+                           name=excluded.name, sub=excluded.sub, cat=excluded.cat,
+                           lat=excluded.lat, lng=excluded.lng, tile=excluded.tile,
+                           tags=excluded.tags, fetched=excluded.fetched`),
+    poisIn:  db.prepare(`SELECT * FROM pois
+                         WHERE lat BETWEEN ? AND ? AND lng BETWEEN ? AND ? LIMIT 900`),
+    tileGet: db.prepare('SELECT * FROM tiles_fetched WHERE tile = ?'),
+    tilePut: db.prepare(`INSERT INTO tiles_fetched(tile, fetched, count) VALUES (?,?,?)
+                         ON CONFLICT(tile) DO UPDATE SET fetched=excluded.fetched, count=excluded.count`),
     placesIn:    db.prepare(`SELECT * FROM places WHERE retired = 0 AND lat BETWEEN ? AND ? AND lng BETWEEN ? AND ? LIMIT 500`),
     /* ON CONFLICT DO NOTHING makes a re-upload harmless: a device that
        re-sends what it wrote after a server wipe cannot create duplicates. */
@@ -336,6 +371,20 @@ function createAPI({file, adminToken, url, authToken}){
         community: Object.fromEntries(
           await Promise.all(rows.map(async p => [p.id, await placeBundle(p.id, viewer && viewer.id)])))
       };
+    },
+
+    /* The map's data source. Clients call this instead of Overpass, so a
+       popular block costs one upstream query rather than one per visitor. */
+    'GET /api/v1/osm': async (req, body, ip, url) => {
+      const bbox = String(url.searchParams.get('bbox') || '').split(',').map(Number);
+      if (bbox.length !== 4 || bbox.some(isNaN)) bad(400, 'bbox=south,west,north,east is required');
+      const [s0, w0, n0, e0] = bbox;
+      const s = Math.min(s0, n0), n = Math.max(s0, n0);
+      const w = Math.min(w0, e0), e = Math.max(w0, e0);
+      /* A whole-continent bbox would ask Overpass for the impossible. */
+      if ((n - s) > 0.5 || (e - w) > 0.5) bad(400, 'bbox is too large — zoom in');
+      if (!rateLimit('osm:' + ip, 240, 60 * 60 * 1000)) bad(429, 'Slow down a moment');
+      return await osm.placesIn(q, {s, w, n, e});
     },
 
     'GET /api/v1/place': async (req, body, ip, url) => {

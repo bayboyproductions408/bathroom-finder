@@ -213,6 +213,41 @@ async function loadArea(auto){
 
   loading = true; status('Loading bathrooms nearby…');
   let data = null, lastErr = null;
+
+  /* Ask our own backend first. It keeps a shared cache of what Overpass has
+     already answered, so a block someone else looked at this month costs
+     nothing and comes back instantly. Overpass is run by volunteers on
+     donated hardware — pointing every user's browser straight at it is both
+     unreliable for them and rude to it.
+
+     If our backend is unreachable the code below still goes to Overpass
+     directly, exactly as before, so this can only ever make things better. */
+  try {
+    const r = await fetch(apiURL(`/api/v1/osm?bbox=${s},${w},${n},${e}`), {
+      signal: AbortSignal.timeout(20000)
+    });
+    if (r.ok){
+      const j = await r.json();
+      if (Array.isArray(j.places)){
+        loading = false;
+        el('status').style.pointerEvents = 'none';
+        fetched.push(b);
+        if (fetched.length > 40) fetched.splice(0, 20);
+        let n2 = 0;
+        for (const p of j.places){
+          if (!features.has(p.id)){ features.set(p.id, {...p, source:'osm'}); n2++; }
+        }
+        cacheFeatures();
+        renderMarkers(); renderList(); updateSearchHere();
+        status(j.stale ? 'Map data is busy — showing the last known map'
+                       : n2 ? `${n2} places loaded` : 'No mapped places in view', 2200);
+        return;
+      }
+    }
+  } catch(err){
+    console.info('backend map cache unavailable, asking OpenStreetMap directly:', err.message);
+  }
+
   for (const url of ENDPOINTS){
     /* Overpass is a free shared service and throttles hard at busy times.
        Without a timeout a single slow request wedges the whole map. */
