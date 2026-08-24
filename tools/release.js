@@ -106,7 +106,18 @@ if (bump || minor){
   const [maj, min, pat] = version.replace(/^v/,'').split('.').map(Number);
   const next = minor ? `v${maj}.${min+1}.0` : `v${maj}.${min}.${pat+1}`;
   fs.writeFileSync(SW, sw.replace(/APP_VERSION\s*=\s*'[^']+'/, `APP_VERSION = '${next}'`));
-  console.log(`\n  bumped ${version} → ${next}`);
+
+  /* Keep package.json in step. It is not what rolls out the web update, but it
+     IS what both native builds use for the store-facing version string — iOS
+     reads it for CFBundleShortVersionString and Android for versionName. Left
+     alone it drifts, and the App Store ends up advertising a version number the
+     app itself does not report. */
+  const PKG = path.join(ROOT, 'package.json');
+  const pkg = JSON.parse(fs.readFileSync(PKG, 'utf8'));
+  pkg.version = next.replace(/^v/, '');
+  fs.writeFileSync(PKG, JSON.stringify(pkg, null, 2) + '\n');
+
+  console.log(`\n  bumped ${version} → ${next}  (package.json too)`);
   console.log(`  every running copy will offer this update within 30 minutes, or on next open.\n`);
 } else {
   console.log(`\n  ready to ship. Use --bump (or --minor) to roll it out.\n`);

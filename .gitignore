@@ -5,6 +5,20 @@ android/*.jks
 certs/
 .env
 
+# generated native projects — 'npx cap add ios|android' recreates these in CI,
+# so they are never committed. The signing material inside android/ is ignored
+# separately above and must survive.
+/ios/
+/android/app/
+/android/build.gradle
+/android/gradle.properties
+/android/settings.gradle
+/android/gradlew
+/android/gradlew.bat
+/android/gradle/
+/android/capacitor.settings.gradle
+/android/variables.gradle
+
 # generated / local state
 data/
 ledger.json

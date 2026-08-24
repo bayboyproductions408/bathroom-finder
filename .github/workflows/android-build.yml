@@ -1,15 +1,24 @@
 # Builds the Android app bundle for Google Play.
-# Runs on Linux runners, which are free and don't burn the macOS multiplier.
 #
-# Secrets needed (Settings → Secrets → Actions):
+# Capacitor, not a Trusted Web Activity. The TWA that used to live here could
+# never verify: Digital Asset Links have to be served from the domain root, and
+# this app is a GitHub Pages *project* site under /bathroom-finder/, so the root
+# belongs to a repo that does not exist. An unverified TWA shows a browser
+# address bar and is, to a reviewer, a website in a wrapper. See ANDROID-PLAN.md.
+#
+# Capacitor sidesteps all of that: real native app, native location and camera,
+# no domain requirement, and the same shape as the iOS pipeline.
+#
+# Runs on Linux, which is free and does not burn the macOS 10x multiplier.
+#
+# Secrets needed for a *signed* bundle (Settings → Secrets → Actions):
 #   ANDROID_KEYSTORE_BASE64   base64 of android/upload-keystore.jks
 #   ANDROID_KEYSTORE_PASSWORD from android/keystore.properties
-#   ANDROID_KEY_ALIAS         bathroomfinder-upload
-#   ANDROID_KEY_PASSWORD      same as the store password by default
+#   ANDROID_KEY_ALIAS         likewise
+#   ANDROID_KEY_PASSWORD      likewise
 #
-# To produce the base64 on Windows:
-#   certutil -encode android\upload-keystore.jks keystore.b64
-# then paste the contents (without the BEGIN/END lines) as the secret.
+# Without them the job still runs and produces an UNSIGNED bundle, which is
+# useful for checking the build compiles but cannot be uploaded to Play.
 
 name: Android build
 
@@ -40,34 +49,67 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Drop the native AdMob plugin
+        # Same reason as iOS: @capacitor-community/admob 6.2 pins an ad SDK that
+        # pulls a consent SDK whose API it predates. It shows no ads until the
+        # app is published and the AdMob account reviewed, so it costs nothing
+        # here, and admob.js already no-ops when the plugin is absent.
+        run: npm remove @capacitor-community/admob --no-save || true
+
+      - name: Generate the Android project
+        run: npx cap add android || echo "android/ already exists"
+
+      - name: Patch signing, version and icon
+        env:
+          # versionCode must increase on every upload or Play refuses the
+          # bundle; the run number is monotonic and free.
+          ANDROID_VERSION_CODE: ${{ github.run_number }}
+          API_BASE: ${{ vars.API_BASE }}
+        run: |
+          node tools/set-api-base.js
+          node tools/prepare-android.js
+
+      - name: Copy the web app in
+        # After prepare-android, which rewrites app/config.js — cap sync is what
+        # copies app/ into the bundle.
+        run: npx cap sync android
+
       - name: Restore the signing key
         env:
           KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           if [ -z "$KS" ]; then
-            echo "No keystore secret set — building an unsigned bundle."
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 — building UNSIGNED. This bundle cannot be uploaded to Play."
             exit 0
           fi
-          echo "$KS" | base64 -d > android/upload-keystore.jks
+          echo "$KS" | tr -d '\r\n ' | base64 -d > android/upload-keystore.jks
           cat > android/keystore.properties <<PROPS
           storeFile=upload-keystore.jks
           storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
           keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
           PROPS
+          echo "keystore restored ($(wc -c < android/upload-keystore.jks) bytes)"
 
       - name: Build the bundle
         run: |
           cd android
-          gradle wrapper --gradle-version 8.9 || true
+          chmod +x gradlew
           ./gradlew bundleRelease --no-daemon
 
       - name: Clean up the key
         if: always()
         run: rm -f android/upload-keystore.jks android/keystore.properties
 
+      - name: Say what came out
+        run: |
+          find android/app/build/outputs -name '*.aab' -print -exec ls -lh {} \;
+
       - uses: actions/upload-artifact@v4
         with:
           name: bathroom-finder-aab
           path: android/app/build/outputs/bundle/release/*.aab
-          if-no-files-found: warn
+          if-no-files-found: error
