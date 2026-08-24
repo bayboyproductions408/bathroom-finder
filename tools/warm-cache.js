@@ -93,11 +93,18 @@ async function main(){
 
   console.log(`warming ${batch.length} of ${ALL.length} boxes (offset ${offset}) -> ${API_BASE}`);
   let okCount = 0, failCount = 0, placeCount = 0, firstWarmed = null;
+  let overpassFails = 0, postFails = 0;
 
   for (const box of batch){
     const label = `${box.city} ${box.s},${box.w}`;
     try {
-      const elements = await osm.askOverpass(box.s, box.w, box.n, box.e);
+      let elements;
+      try {
+        elements = await osm.askOverpass(box.s, box.w, box.n, box.e);
+      } catch(err){
+        err.stage = 'overpass';
+        throw err;
+      }
       const places = elements.map(osm.classify).filter(Boolean);
       placeCount += places.length;
 
@@ -117,6 +124,7 @@ async function main(){
       if (!firstWarmed) firstWarmed = box;
     } catch(err){
       failCount++;
+      if (err.stage === 'overpass') overpassFails++; else postFails++;
       console.log(`  fail ${label.padEnd(30)} ${err.message}`);
     }
     /* Pace it. Nobody is waiting, and Overpass is a donation. */
@@ -127,7 +135,17 @@ async function main(){
   /* A partial run is a good run — some boxes warmed beats none, and failing
      the job would only send a red email about a cache that is still fine. */
   if (okCount === 0 && batch.length > 0){
-    console.error('nothing warmed at all — is Overpass reachable from here?');
+    /* Name the half that actually broke. "Is Overpass reachable" is a
+       terrible thing to print when Overpass answered fine and the backend
+       rejected the token — it sends you debugging the wrong machine. */
+    if (postFails && !overpassFails){
+      console.error(`Overpass answered (${placeCount} places seen) but the backend refused every post.`);
+      console.error('ADMIN_TOKEN almost certainly does not match the one set on the server.');
+    } else if (overpassFails && !postFails){
+      console.error('Overpass answered nothing at all — blocked, rate-limited, or down from here.');
+    } else {
+      console.error('nothing warmed: both Overpass and the backend failed.');
+    }
     process.exit(1);
   }
 }
