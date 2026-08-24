@@ -27,7 +27,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 40
 
     env:
@@ -39,6 +39,26 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Use the newest Xcode on the image
+        # Apple rejects uploads built against an old SDK: "This app was built
+        # with the iOS 17.5 SDK. All iOS and iPadOS apps must be built with the
+        # iOS 26 SDK or later." The runner defaults to whichever Xcode the image
+        # calls current, which lags. Pick the highest installed rather than
+        # pinning a version that will age out and fail the same way later.
+        run: |
+          echo "Xcodes on this image:"
+          ls -d /Applications/Xcode*.app 2>/dev/null || true
+          NEWEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$NEWEST" ]; then
+            sudo xcode-select -s "$NEWEST"
+            echo "selected: $NEWEST"
+          else
+            echo "::warning::no versioned Xcode found, using the image default"
+          fi
+          xcodebuild -version
+          echo "iOS SDKs available:"
+          xcodebuild -showsdks | grep -i ios || true
 
       - uses: actions/setup-node@v4
         with:
