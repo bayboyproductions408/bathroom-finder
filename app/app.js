@@ -42,7 +42,9 @@ const CATS = {
   toilets: {label:'Public toilets', color:'var(--open)',  icon:I.unlock},
   food:    {label:'Food & drink',   color:'var(--code)',  icon:I.people},
   lodging: {label:'Hotels',         color:'var(--ask)',   icon:I.home},
-  shop:    {label:'Shops & malls',  color:'#7C6BB5',      icon:I.people},
+  shop:    {label:'Shops',          color:'#7C6BB5',      icon:I.people},
+  health:  {label:'Health',         color:'#C0455F',      icon:I.shield},
+  leisure: {label:'Things to do',   color:'#2F7CB8',      icon:I.sparkle},
   fuel:    {label:'Gas stations',   color:'#C2591F',      icon:I.nav},
   civic:   {label:'Civic',          color:'#3F8F8A',      icon:I.shield},
   host:    {label:'Rentable',       color:'var(--host)',  icon:I.home}
@@ -180,14 +182,34 @@ async function loadArea(auto){
   if (loading){ clearTimeout(loadTimer); loadTimer = setTimeout(loadArea, 1200); renderList(); return; }
   const s = b.getSouth().toFixed(5), w = b.getWest().toFixed(5), n = b.getNorth().toFixed(5), e = b.getEast().toFixed(5);
   const bbox = `(${s},${w},${n},${e})`;
-  /* Two separate result sets so a dense restaurant district can never crowd
-     the actual toilets out of the response. */
+  /* Two separate result sets so a dense high street can never crowd the
+     actual public toilets out of the response.
+
+     The venue set is deliberately broad: nearly every business has a
+     bathroom, and the only way anyone can tell you the one in the hardware
+     store is behind the paint counter is if the hardware store is on the map
+     to begin with. So fetch shops, offices and healthcare wholesale rather
+     than curating a list of "likely" categories — a curated list is exactly
+     how the useful, unglamorous places get left off.
+
+     ["name"] on every clause is what keeps this affordable. Unnamed nodes are
+     overwhelmingly street furniture, and nobody looks for a bathroom in a
+     thing with no name. */
   const query =
-    `[out:json][timeout:25];` +
+    `[out:json][timeout:30];` +
     `(nwr["amenity"="toilets"]${bbox};)->.t;.t out center 300;` +
-    `(nwr["amenity"~"^(restaurant|cafe|fast_food|bar|pub|fuel|library|community_centre|townhall)$"]${bbox};` +
-    ` nwr["tourism"~"^(hotel|hostel|guest_house|motel)$"]${bbox};` +
-    ` nwr["shop"~"^(mall|department_store|supermarket)$"]${bbox};)->.v;.v out center 350;`;
+    `(nwr["shop"]["name"]${bbox};` +
+    ` nwr["office"]["name"]${bbox};` +
+    ` nwr["healthcare"]["name"]${bbox};` +
+    ` nwr["amenity"~"^(restaurant|cafe|fast_food|bar|pub|biergarten|food_court|ice_cream|fuel|` +
+    `charging_station|library|community_centre|townhall|post_office|marketplace|pharmacy|bank|` +
+    `cinema|theatre|nightclub|casino|arts_centre|hospital|clinic|doctors|dentist|veterinary|` +
+    `college|university|place_of_worship|social_facility|childcare|police|fire_station)$"]["name"]${bbox};` +
+    ` nwr["tourism"~"^(hotel|hostel|guest_house|motel|museum|gallery|attraction|theme_park|zoo|` +
+    `aquarium|information|camp_site|caravan_site)$"]["name"]${bbox};` +
+    ` nwr["leisure"~"^(fitness_centre|sports_centre|swimming_pool|bowling_alley|golf_course|` +
+    `water_park|stadium|ice_rink|dance|adult_gaming_centre)$"]["name"]${bbox};` +
+    `)->.v;.v out center 700;`;
 
   loading = true; status('Loading bathrooms nearby…');
   let data = null, lastErr = null;
@@ -240,14 +262,30 @@ function fromOSM(e){
   const t = e.tags || {};
   let cat = null;
   if (t.amenity === 'toilets') cat = 'toilets';
-  else if (['restaurant','cafe','fast_food','bar','pub'].includes(t.amenity)) cat = 'food';
-  else if (['hotel','hostel','guest_house','motel'].includes(t.tourism)) cat = 'lodging';
-  else if (t.amenity === 'fuel') cat = 'fuel';
-  else if (['mall','department_store','supermarket'].includes(t.shop)) cat = 'shop';
-  else if (['library','community_centre','townhall'].includes(t.amenity)) cat = 'civic';
+  else if (['restaurant','cafe','fast_food','bar','pub','biergarten','food_court','ice_cream']
+             .includes(t.amenity)) cat = 'food';
+  else if (['hotel','hostel','guest_house','motel','camp_site','caravan_site'].includes(t.tourism)) cat = 'lodging';
+  else if (t.amenity === 'fuel' || t.amenity === 'charging_station') cat = 'fuel';
+  else if (['pharmacy','hospital','clinic','doctors','dentist','veterinary'].includes(t.amenity)
+             || t.healthcare) cat = 'health';
+  else if (['cinema','theatre','nightclub','casino','arts_centre'].includes(t.amenity)
+             || ['museum','gallery','attraction','theme_park','zoo','aquarium'].includes(t.tourism)
+             || t.leisure) cat = 'leisure';
+  else if (['library','community_centre','townhall','post_office','marketplace','bank',
+            'college','university','place_of_worship','social_facility','childcare',
+            'police','fire_station','information'].includes(t.amenity)
+             || t.tourism === 'information' || t.office) cat = 'civic';
+  else if (t.shop) cat = 'shop';
+  /* Anything named that came back from the venue query is a place a person
+     could walk into and ask. Dropping it because it does not match a known
+     tag is how the map ends up missing exactly the odd little shop that turns
+     out to have the only unlocked bathroom on the street. */
+  else if (t.name) cat = 'shop';
   if (!cat) return null;
+
   const kindName = t.amenity === 'toilets' ? 'Public toilets'
-    : (t.amenity || t.tourism || t.shop || '').replace(/_/g,' ');
+    : (t.shop || t.amenity || t.tourism || t.leisure || t.office || t.healthcare || 'Business')
+        .replace(/_/g,' ');
   return {id:`osm:${e.type}/${e.id}`, source:'osm', cat, lat, lng,
           name:t.name || (cat === 'toilets' ? 'Public toilets' : kindName.replace(/^./,c=>c.toUpperCase())),
           sub:kindName.replace(/^./,c=>c.toUpperCase()), tags:t};
@@ -375,7 +413,8 @@ async function pullShared(){
    Stored trimmed — only the tags the app actually reads.                  */
 const POI_CACHE_KEY = 'bf.poi.v1';
 const POI_TTL = 14 * 86400000;
-const KEEP_TAGS = ['amenity','tourism','shop','name','opening_hours','fee','charge','wheelchair',
+const KEEP_TAGS = ['amenity','tourism','shop','leisure','office','healthcare','brand',
+  'name','opening_hours','fee','charge','wheelchair',
                    'changing_table','unisex','access','operator','check_date','toilets','toilets:access'];
 function cacheFeatures(){
   try {
@@ -546,6 +585,7 @@ function renderMarkers(){
 }
 
 /* ---------- list ---------- */
+const LIST_CAP = 120;
 function listFeatures(){
   const origin = state.me || map.getCenter();
   const b = map.getBounds();
@@ -561,7 +601,12 @@ function listFeatures(){
     open:(a,b)=>openRank(a)-openRank(b) || a.d-b.d,
     trusted:(a,b)=>trustScore(b.f, community(b.f.id))-trustScore(a.f, community(a.f.id)) || a.d-b.d
   };
-  return list.sort(sorters[state.sort] || sorters.dist).slice(0, 120);
+  const sorted = list.sort(sorters[state.sort] || sorters.dist);
+  /* The list is capped for the sake of phones, but the count in the header
+     should describe the map, not the cap. Now that every business in view is
+     fetched, "120 places in view" over a busy high street is simply wrong. */
+  state.listTotal = sorted.length;
+  return sorted.slice(0, LIST_CAP);
 }
 function hoursChip(f){
   const h = openState(f);
@@ -648,7 +693,13 @@ function renderList(){
   state.listCache = rows;
   const head = el('sheet-count');
   if (map.getZoom() < 13) head.textContent = 'Zoom in to load bathrooms';
-  else head.textContent = rows.length ? `${rows.length} place${rows.length===1?'':'s'} in view` : 'Nothing in view yet';
+  else if (!rows.length) head.textContent = 'Nothing in view yet';
+  else {
+    const total = state.listTotal || rows.length;
+    head.textContent = total === rows.length
+      ? `${total} place${total === 1 ? '' : 's'} in view`
+      : `${total} places in view · nearest ${rows.length}`;
+  }
   /* One slot, after the first handful of results — never above them. The
      first thing on screen is always a real bathroom. */
   let body;
