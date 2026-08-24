@@ -1658,7 +1658,7 @@ function renderProfile(){
       </div>
     </div>
     <div class="section">
-      <h2>Testing this app</h2>
+      <h2>Help improve the app</h2>
       <div class="card" style="padding:4px 14px">
         <button class="row navrow" data-nav="feedback">
           <span class="ico" style="background:var(--code-soft); color:var(--code)">${I.bubbleAlt}</span>
@@ -1666,7 +1666,7 @@ function renderProfile(){
           <span class="tail">${I.back}</span></button>
       </div>
       <p style="font-size:11.5px;color:var(--ink-3);line-height:1.55;margin:10px 2px 0">
-        ${Sync.online ? 'Connected — what you add is shared with other testers.'
+        ${Sync.online ? 'Connected — what you add is shared with everyone using the app.'
                       : 'No connection to the shared database, so your contributions stay on this device for now.'}
       </p>
     </div>

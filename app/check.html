@@ -154,7 +154,7 @@ try {
 /* --- the shared backend --- */
 fetch('/api/v1/health').then(r => r.json()).then(h => {
   add('Shared database', h && h.ok ? 'ok' : 'no',
-      h && h.ok ? 'Connected. What you add is shared with other testers.' : 'Server answered oddly.');
+      h && h.ok ? 'Connected. What you add is shared with everyone using the app.' : 'Server answered oddly.');
 }).catch(err => add('Shared database', 'no', 'Cannot reach the backend: ' + err.message,
   'The app still works, but everything you add stays on this phone only.'));
 
