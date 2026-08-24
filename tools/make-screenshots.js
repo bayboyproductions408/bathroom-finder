@@ -193,12 +193,31 @@ async function main(){
         await sleep(2500);                       // let the last tiles paint
 
         /* The install banner is a browser affordance, not part of the app the
-           store is reviewing, and Apple rejects screenshots containing it. */
+           store is reviewing, and Apple rejects screenshots containing it.
+
+           Toasts go too. "Loading bathrooms nearby..." is a transient status
+           that happened to be on screen when the shutter fell — it sat across
+           the middle of the previous London shot. A store screenshot showing
+           a loading message makes a working app look like it is still
+           thinking. The data is already in by this point; the gate above
+           waited for it. */
         await c.send('Runtime.evaluate', {returnByValue:true, expression: `
           (() => {
             let n = 0;
             document.querySelectorAll('#btn-install, .install-btn, #consent, .consent')
               .forEach(e => { e.remove(); n++; });
+            /* Emptying the container is not enough: the app raises a fresh
+               toast while the map settles, so one reappears in the gap
+               before the shutter. Hide the container for good instead. */
+            if (!document.getElementById('shotcss')){
+              const st = document.createElement('style');
+              st.id = 'shotcss';
+              st.textContent = '#toasts{display:none !important}';
+              document.head.appendChild(st);
+              n++;
+            }
+            const t = document.getElementById('toasts');
+            if (t) t.innerHTML = '';
             return n;
           })()`});
         await sleep(400);

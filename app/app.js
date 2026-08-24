@@ -168,20 +168,35 @@ const ENDPOINTS = ['https://overpass-api.de/api/interpreter',
                    'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
 let loadTimer = null, loading = false;
 
-/* Auto-load the first view, then hand control to the user with a
-   "Search this area" button. Overpass is a shared free service and
-   refetching on every pan gets you throttled — which is exactly what
-   made the map feel broken during testing.                          */
-let autoLoaded = false;
+/* Load whatever the user is looking at, once they stop moving.
+
+   This was first-view-only, with a "Search this area" button for everything
+   after, because every pan meant another Overpass query and Overpass
+   throttles hard enough to make the map feel broken. That constraint is
+   gone: the backend keeps its own cache of places keyed by tile, so a view
+   already seen — or one merely overlapping it — is a database read costing
+   no upstream call at all.
+
+   Three things keep this from becoming a request per pixel:
+     - the debounce fires once, after movement stops, so a flick across
+       several blocks is one load and not twenty
+     - boundsCovered() drops any view already held, so panning back and
+       forth over the same streets asks for nothing
+     - loadArea serialises on `loading`, so a fast pan cannot put two
+       queries in flight at once                                          */
+const IDLE_MS = 650;
+let loadFailed = false;
 function scheduleLoad(force){
   clearTimeout(loadTimer);
-  if (force || !autoLoaded){ loadTimer = setTimeout(() => loadArea(true), 500); return; }
-  updateSearchHere();
+  loadTimer = setTimeout(() => loadArea(!force), force ? 0 : IDLE_MS);
 }
 function updateSearchHere(){
   const btn = el('search-here');
   if (!btn || !map) return;
-  const need = map.getZoom() >= 13 && !boundsCovered(map.getBounds().pad(0.05));
+  /* Only shown when the automatic load could not do it. Without the
+     loadFailed condition this would flash on every single pan, in the gap
+     between the map stopping and the places arriving. */
+  const need = loadFailed && map.getZoom() >= 13 && !boundsCovered(map.getBounds().pad(0.05));
   btn.hidden = !need || !!state.dropMode;
 }
 function boundsCovered(b){
@@ -189,10 +204,12 @@ function boundsCovered(b){
 }
 async function loadArea(auto){
   if (!map) return;
-  if (map.getZoom() < 13){ status('Zoom in to load bathrooms', 2600); renderList(); return; }
+  /* Only say this when the user actually asked. Auto-load runs every time
+     the map settles, and at world zoom that would put "Zoom in to load
+     bathrooms" on screen constantly while someone is simply panning. */
+  if (map.getZoom() < 13){ if (!auto) status('Zoom in to load bathrooms', 2600); renderList(); return; }
   const b = map.getBounds().pad(0.15);
   if (boundsCovered(b)) { renderList(); updateSearchHere(); return; }
-  autoLoaded = true;
   el('search-here').hidden = true;
   /* A request is already in flight. Don't fire a second one, but don't drop
      this view either — re-check once the current load finishes, or the area
@@ -262,6 +279,7 @@ async function loadArea(auto){
           if (!features.has(p.id)){ features.set(p.id, {...p, source:'osm'}); n2++; }
         }
         cacheFeatures();
+        loadFailed = false;
         renderMarkers(); renderList(); updateSearchHere();
         status(j.stale ? 'Map data is busy — showing the last known map'
                        : n2 ? `${n2} places loaded` : 'No mapped places in view', 2200);
@@ -291,6 +309,10 @@ async function loadArea(auto){
   }
   loading = false;
   if (!data){
+    /* Auto-load could not deliver this view, so give the user something to
+       press. This is the only path that reveals the button now. */
+    loadFailed = true;
+    updateSearchHere();
     const busy = lastErr && /busy|abort/i.test(lastErr.message);
     const haveCached = [...features.values()].some(f => map.getBounds().contains([f.lat, f.lng]));
     status(haveCached ? 'Map data is busy — showing what you loaded before'
@@ -301,6 +323,7 @@ async function loadArea(auto){
     return;
   }
   el('status').style.pointerEvents = 'none';
+  loadFailed = false;
 
   fetched.push(b);
   if (fetched.length > 40) fetched.splice(0, 20);
