@@ -1,0 +1,178 @@
+# Launches the iOS app in a simulator and checks it actually works.
+#
+# Why this exists: a build can pass Apple's automated processing, show as
+# VALID in App Store Connect, and still be broken. That check validates the
+# package, not the program. Without a Mac in the room, nothing here had ever
+# executed the app — and submitting software for review that has never been
+# run once is how you collect a Guideline 2.1 rejection and lose a week.
+#
+# It checks the three things that get a Capacitor app rejected:
+#   1. it compiles for a device at all
+#   2. it does not crash on launch
+#   3. it draws something — a Capacitor app whose web bundle fails to load
+#      does not crash, it shows a white rectangle, and a liveness check alone
+#      would call that a pass
+#
+# Runs on demand, and on every push that touches the app or the native shell.
+
+name: iOS smoke test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'tools/prepare-ios.js'
+      - 'tools/set-api-base.js'
+      - 'capacitor.config.json'
+      - 'package.json'
+      - '.github/workflows/ios-smoke-test.yml'
+
+jobs:
+  smoke:
+    runs-on: macos-15
+    timeout-minutes: 35
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use the newest Xcode on the image
+        run: |
+          NEWEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$NEWEST" ]; then sudo xcode-select -s "$NEWEST"; echo "selected: $NEWEST"; fi
+          xcodebuild -version
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Drop the native AdMob plugin
+        # Same reason as the TestFlight job: broken upstream against UMP 3.
+        run: npm remove @capacitor-community/admob --no-save || true
+
+      - name: Generate the iOS project
+        run: |
+          npx cap add ios
+          test -f ios/App/App.xcodeproj/project.pbxproj || {
+            echo "::error::cap add ios produced no project"; exit 1; }
+
+      - name: Patch Info.plist and the backend URL
+        env:
+          API_BASE: ${{ vars.API_BASE || 'https://bathroom-finder.onrender.com' }}
+        run: |
+          node tools/set-api-base.js
+          node tools/prepare-ios.js
+          npx cap sync ios
+
+      - name: Build for the simulator
+        # No signing: a simulator binary is not signed, and asking for a
+        # certificate here would fail on a fork or with secrets unset.
+        run: |
+          set -o pipefail
+          cd ios/App
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tail -40
+          APP=$(find "$RUNNER_TEMP/dd/Build/Products" -name '*.app' -maxdepth 3 | head -1)
+          test -n "$APP" || { echo "::error::no .app was produced"; exit 1; }
+          echo "APP_PATH=$APP" >> "$GITHUB_ENV"
+          echo "built $APP"
+
+      - name: Boot a simulator
+        run: |
+          # Pick the newest available iPhone rather than pinning a model that
+          # will vanish from a future image.
+          UDID=$(xcrun simctl list devices available --json \
+            | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{
+                const j=JSON.parse(d), all=[];
+                for (const [rt, ds] of Object.entries(j.devices))
+                  for (const dev of ds) if (/iPhone/.test(dev.name)) all.push({rt, ...dev});
+                all.sort((a,b)=>a.rt.localeCompare(b.rt,undefined,{numeric:true}) || a.name.localeCompare(b.name));
+                const pick = all[all.length-1];
+                if (!pick){ console.error('no iPhone simulator available'); process.exit(1); }
+                process.stderr.write('using '+pick.name+' on '+pick.rt+'\n');
+                console.log(pick.udid);
+              });")
+          test -n "$UDID" || { echo "::error::no simulator to boot"; exit 1; }
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+
+      - name: Install, grant location, and launch
+        run: |
+          BUNDLE=$(node -p "require('./capacitor.config.json').appId")
+          echo "BUNDLE=$BUNDLE" >> "$GITHUB_ENV"
+
+          xcrun simctl install "$UDID" "$APP_PATH"
+
+          # Pre-grant location and put the device downtown. Without this the
+          # app sits behind a permission dialog and the screenshot would show
+          # the dialog rather than the app — a pass that proved nothing.
+          xcrun simctl privacy "$UDID" grant location "$BUNDLE" || echo "::warning::could not pre-grant location"
+          xcrun simctl location "$UDID" set 34.0522,-118.2437 || echo "::warning::could not set location"
+
+          # --console-pty streams the app's stdout, which is where Capacitor
+          # forwards console.log from the web layer. Backgrounded so the step
+          # can carry on while it keeps writing.
+          xcrun simctl launch --console-pty "$UDID" "$BUNDLE" > "$RUNNER_TEMP/launch.log" 2>&1 &
+          sleep 5
+          echo "launched $BUNDLE"
+
+      - name: Is it still running?
+        run: |
+          sleep 12
+          # Simulator apps are ordinary host processes, so pgrep sees them.
+          if pgrep -f "$APP_PATH/App" > /dev/null; then
+            echo "the app is still running after launch"
+          else
+            echo "::error::the app is not running — it crashed on launch"
+            echo "--- launch output ---"; cat "$RUNNER_TEMP/launch.log" || true
+            echo "--- recent crash reports ---"
+            ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -2 | while read -r f; do
+              echo "== $f"; head -60 "$f"; done
+            exit 1
+          fi
+
+      - name: Let the map load, then look at the screen
+        run: |
+          # Tiles and the place query both cross the network; a screenshot at
+          # two seconds would show an honest but useless half-drawn app.
+          sleep 20
+          xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/first.png"
+          sleep 15
+          xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/second.png"
+
+          # The first is informational — at 20s the map may still be drawing,
+          # and failing there would be a flaky test rather than a real one.
+          # The second decides.
+          echo "=============== first screenshot (t+20s) ==============="
+          node tools/screenshot-check.js "$RUNNER_TEMP/first.png" || echo "(still drawing at 20s, not fatal)"
+          echo "=============== second screenshot (t+35s), this one counts ==="
+          node tools/screenshot-check.js "$RUNNER_TEMP/second.png"
+
+      - name: What the app logged
+        if: always()
+        run: |
+          echo "--- launch console ---"
+          cat "$RUNNER_TEMP/launch.log" 2>/dev/null | tail -60 || echo "(none)"
+          echo "--- errors from the app process ---"
+          xcrun simctl spawn "$UDID" log show --last 3m --style compact \
+            --predicate "processImagePath CONTAINS \"$BUNDLE\"" 2>/dev/null \
+            | grep -iE "error|fail|exception|unable" | head -30 || echo "(no error lines)"
+
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-screenshots
+          path: ${{ runner.temp }}/*.png
+          if-no-files-found: warn
