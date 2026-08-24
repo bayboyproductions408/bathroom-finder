@@ -1,0 +1,79 @@
+# Keeps the shared map cache full, from a machine Overpass will talk to.
+#
+# The backend cannot do this itself. Render's egress to overpass-api.de fails
+# at the network level — the logs say "fetch failed", which is a refusal, not a
+# rate limit — so the on-demand path in server/osm.js can never populate the
+# cache from production. GitHub's runners are not blocked, so the fetching
+# happens here and the result is posted to the backend.
+#
+# Needs one secret and one variable:
+#   ADMIN_TOKEN  (secret)   Render → your service → Environment → ADMIN_TOKEN
+#   API_BASE     (variable) defaults to the live backend if unset
+#
+# Without ADMIN_TOKEN the job stops immediately and says so, rather than
+# quietly warming nothing every night.
+
+name: Warm map cache
+
+on:
+  schedule:
+    # 09:12 UTC — early morning in California, so the cache is warm before the
+    # people most likely to open the app do. Not on the hour: every cron on
+    # GitHub fires at :00 and the queue is worst there.
+    - cron: '12 9 * * *'
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: How many boxes to warm this run
+        required: false
+        default: '12'
+      offset:
+        description: Where to start in the list (blank = rotate by date)
+        required: false
+        default: ''
+
+jobs:
+  warm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check the token is present
+        env:
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          if [ -z "$ADMIN_TOKEN" ]; then
+            echo "::error::ADMIN_TOKEN is not set. Copy it from Render → Environment."
+            exit 1
+          fi
+          echo "token present (${#ADMIN_TOKEN} chars)"
+
+      - name: Warm the cache
+        env:
+          API_BASE: ${{ vars.API_BASE || 'https://bathroom-finder.onrender.com' }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          ARGS="--limit ${{ inputs.limit || '12' }}"
+          if [ -n "${{ inputs.offset }}" ]; then ARGS="$ARGS --offset ${{ inputs.offset }}"; fi
+          node tools/warm-cache.js $ARGS
+
+      - name: Show what a user would now get
+        env:
+          API_BASE: ${{ vars.API_BASE || 'https://bathroom-finder.onrender.com' }}
+        run: |
+          # Downtown LA, which the warmer covers. Proves the cache is readable,
+          # not just writable — a warm job that stores into a hole nobody reads
+          # would look perfectly green.
+          curl -s --max-time 60 \
+            "$API_BASE/api/v1/osm?bbox=34.0400,-118.2550,34.0650,-118.2300" \
+            | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{
+                const j=JSON.parse(d);
+                console.log('places='+j.places.length+' cached='+j.cached+' fetched='+j.fetchedTiles+' stale='+j.stale);
+                if (j.places.length === 0) console.log('::warning::cache still empty for downtown LA');
+              });"

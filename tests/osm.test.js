@@ -170,3 +170,29 @@ test('an empty answer is distrusted quickly, a full one is kept', async () => {
   await osm.placesIn(q, BOX, {fetch: full, now: t1 + osm.EMPTY_TTL_MS + 1000});
   assert.strictEqual(full.calls.length, 1, 'a populated tile keeps the long TTL');
 });
+
+test('storePlaces writes what the warmer sends and marks the tiles', async () => {
+  const {q} = await freshDb();
+  const places = ELEMENTS.map(osm.classify).filter(Boolean);
+  const r = await osm.storePlaces(q, BOX, places);
+  assert.strictEqual(r.stored, 3, 'the unnamed bench is still dropped');
+
+  /* and a reader now gets them without any upstream call at all */
+  const never = async () => { throw new Error('must not be called'); };
+  const read = await osm.placesIn(q, BOX, {fetch: never});
+  assert.strictEqual(read.places.length, 3);
+  assert.strictEqual(read.fetchedTiles, 0);
+  assert.strictEqual(read.stale, false, 'a warmed area is not stale');
+});
+
+test('storePlaces refuses junk without poisoning the map', async () => {
+  const {q} = await freshDb();
+  const r = await osm.storePlaces(q, BOX, [
+    null,
+    {id:'osm:node/1', lat:'not a number', lng:-122.34, name:'Bad'},
+    {lat:47.61, lng:-122.34, name:'No id'},
+    {id:'osm:node/2', lat:47.6090, lng:-122.3400, cat:'shop', name:'Good Shop'},
+    {id:'osm:node/2', lat:47.6090, lng:-122.3400, cat:'shop', name:'Duplicate'}
+  ]);
+  assert.strictEqual(r.stored, 1, 'only the one valid, non-duplicate place');
+});

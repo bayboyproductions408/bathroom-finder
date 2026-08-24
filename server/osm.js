@@ -144,6 +144,40 @@ async function askOverpass(s, w, n, e, fetchImpl = fetch){
   throw lastErr || new Error('overpass unavailable');
 }
 
+/* Write classified places into the cache and mark the tiles as fetched.
+
+   Shared by the live path and by the cache warmer, so a place stored ahead of
+   time is byte-identical to one stored on demand. Takes already-classified
+   places (nulls tolerated) rather than raw elements, so the warmer can run the
+   same classify() in its own process and post something compact. */
+async function storePlaces(q, {s, w, n, e}, places, nowMs = Date.now()){
+  const seen = new Set();
+  const rows = [];
+  for (const p of places){
+    if (!p || !p.id || seen.has(p.id)) continue;
+    if (typeof p.lat !== 'number' || typeof p.lng !== 'number') continue;
+    seen.add(p.id);
+    rows.push([p.id, tileKey(p.lat, p.lng), p.cat || 'shop', p.lat, p.lng,
+               String(p.name || 'Business').slice(0, 200),
+               String(p.sub || '').slice(0, 120),
+               JSON.stringify(p.tags || {}), nowMs]);
+  }
+  /* Chunked rather than one row at a time: against a networked database each
+     statement is a round trip, and 400 of them is slower than the Overpass
+     query that produced them. 100 keeps the parameter count well inside
+     SQLite's limit. */
+  if (q.poiPutMany){
+    for (let i = 0; i < rows.length; i += 100) await q.poiPutMany(rows.slice(i, i + 100));
+  } else {
+    for (const r of rows) await q.poiPut.run(...r);
+  }
+  /* Mark every tile in the box fetched, including ones that came back empty.
+     Without that, a quiet suburb is re-queried on every pan. */
+  const tiles = tilesFor(s, w, n, e);
+  for (const t of tiles) await q.tilePut.run(t, nowMs, seen.size);
+  return {stored: rows.length, tiles: tiles.length};
+}
+
 /* Returns {places, cached, fetchedTiles, stale}.
    Never throws for an Overpass failure — a stale or partial map beats none,
    and the caller has no better answer to give the user. */
@@ -164,28 +198,9 @@ async function placesIn(q, {s, w, n, e}, opts = {}){
   if (fresh.size < tiles.length){
     try {
       const elements = await askOverpass(s, w, n, e, fetchImpl);
-      const seen = new Set();
-      const rows = [];
-      for (const el of elements){
-        const p = classify(el);
-        if (!p || seen.has(p.id)) continue;
-        seen.add(p.id);
-        rows.push([p.id, tileKey(p.lat, p.lng), p.cat, p.lat, p.lng,
-                   p.name, p.sub, JSON.stringify(p.tags), nowMs]);
-      }
-      /* Chunked rather than one row at a time: against a networked database
-         each statement is a round trip, and 400 of them is slower than the
-         Overpass query that produced them. 100 keeps the parameter count well
-         inside SQLite's limit. */
-      if (q.poiPutMany){
-        for (let i = 0; i < rows.length; i += 100) await q.poiPutMany(rows.slice(i, i + 100));
-      } else {
-        for (const r of rows) await q.poiPut.run(...r);
-      }
-      /* Mark every requested tile fetched, including the ones that came back
-         empty. Without that, a quiet suburb is re-queried on every pan. */
-      for (const t of tiles) await q.tilePut.run(t, nowMs, seen.size);
+      const stored = await storePlaces(q, {s, w, n, e}, elements.map(classify), nowMs);
       fetchedTiles = tiles.length - fresh.size;
+      void stored;
     } catch(err){
       /* Serve whatever is cached. Saying so lets the client tell the user the
          difference between "nothing here" and "could not reach the source". */
@@ -207,5 +222,5 @@ async function placesIn(q, {s, w, n, e}, opts = {}){
   };
 }
 
-module.exports = { placesIn, classify, tilesFor, tileKey, buildQuery,
-                   TILE, TTL_MS, EMPTY_TTL_MS, MAX_TILES };
+module.exports = { placesIn, storePlaces, classify, tilesFor, tileKey, buildQuery,
+                   askOverpass, TILE, TTL_MS, EMPTY_TTL_MS, MAX_TILES };

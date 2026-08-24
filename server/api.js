@@ -409,6 +409,29 @@ function createAPI({file, adminToken, url, authToken}){
       return await osm.placesIn(q, {s, w, n, e});
     },
 
+    /* Fill the cache from somewhere that can actually reach Overpass.
+
+       This host cannot: Render's egress to overpass-api.de fails at the
+       network level, so the live path above never gets to populate anything.
+       A scheduled job elsewhere does the fetching and posts the result here.
+
+       Moderator token required, and not negotiable. This writes the map every
+       user reads — an open version would let anyone invent businesses, or
+       quietly delete a neighbourhood by posting an empty box over it. */
+    'POST /api/v1/osm/warm': async (req, body) => {
+      needAdmin(req);
+      const b = body || {};
+      const s0 = Number(b.s), w0 = Number(b.w), n0 = Number(b.n), e0 = Number(b.e);
+      if ([s0, w0, n0, e0].some(v => !isFinite(v))) bad(400, 's,w,n,e are required');
+      const s = Math.min(s0, n0), n = Math.max(s0, n0);
+      const w = Math.min(w0, e0), e = Math.max(w0, e0);
+      if ((n - s) > 0.5 || (e - w) > 0.5) bad(400, 'box is too large');
+      if (!Array.isArray(b.places)) bad(400, 'places[] is required');
+      if (b.places.length > 2000) bad(400, 'too many places in one box');
+      const r = await osm.storePlaces(q, {s, w, n, e}, b.places);
+      return {ok:true, ...r};
+    },
+
     'GET /api/v1/place': async (req, body, ip, url) => {
       const id = url.searchParams.get('id');
       if (!id) bad(400, 'id is required');
