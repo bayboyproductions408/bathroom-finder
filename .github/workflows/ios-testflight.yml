@@ -283,6 +283,20 @@ jobs:
             -authenticationKeyID "$KEY_ID" \
             -authenticationKeyIssuerID "$ISSUER"
 
+      - name: Tell testers what changed
+        # The "notes" input above was declared and then never used by
+        # anything, so every build reached TestFlight with empty release
+        # notes. Four uploads in a row showed up as an identical "1.5.0"
+        # with nothing to tell them apart, which is indistinguishable from
+        # the new build never arriving.
+        env:
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          NOTES: ${{ inputs.notes }}
+        run: node tools/set-testflight-notes.js
+
       - name: Clean up the key
         if: always()
         run: rm -rf ~/private_keys
