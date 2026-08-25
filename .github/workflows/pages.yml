@@ -44,6 +44,16 @@ jobs:
           node tests/run.js
           node --test tests/api.test.js
 
+      - name: Do the screens still open?
+        # The unit tests only load lib.js and the simulator smoke test never
+        # taps anything, so a throw inside renderDetail went unnoticed until
+        # a user reported that tapping a bathroom did nothing. This opens the
+        # screens in a real browser against the site that is already live —
+        # it will not catch a regression before it deploys, but it will say
+        # so loudly straight afterwards, which beats finding out by report.
+        continue-on-error: true
+        run: node tools/ui-smoke.js
+
       - name: Will anyone already running the app actually get this?
         # The shell is served cache-first under a cache named after
         # APP_VERSION. Ship app/ without bumping it and the deploy is real,
