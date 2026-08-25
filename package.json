@@ -1,6 +1,6 @@
 {
   "name": "bathroom-finder",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "private": true,
   "description": "A worldwide, community-reviewed map of bathrooms",
   "engines": {

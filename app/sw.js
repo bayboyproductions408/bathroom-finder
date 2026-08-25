@@ -3,7 +3,7 @@
 
    Bump APP_VERSION to ship an update. Clients notice the new worker,
    show "Update ready", and swap over on tap.                          */
-const APP_VERSION = 'v1.5.3';
+const APP_VERSION = 'v1.5.4';
 const SHELL = `shell-${APP_VERSION}`;
 const TILES = 'tiles-v1';
 const MODELS = 'models-v1';

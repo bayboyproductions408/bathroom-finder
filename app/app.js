@@ -2262,6 +2262,9 @@ function syncTabBarHeight(){
 
 function initSheet(){
   syncTabBarHeight();
+  /* Label text is what makes the bar as tall as it is, so re-measure once
+     the webfont has actually replaced the fallback. */
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(syncTabBarHeight);
   /* A resize listener is not enough: the bar's height also changes when the
      safe area resolves, when a tab is hidden, or when fonts finish loading,
      none of which fire resize. Watching the element itself catches all of
@@ -2269,7 +2272,11 @@ function initSheet(){
      tucked behind it. */
   if (window.ResizeObserver){
     const bar = document.querySelector('.tabbar');
-    if (bar) new ResizeObserver(syncTabBarHeight).observe(bar);
+    /* border-box, not the default content box. The bar's height moves
+       through its padding — calc(10px + env(safe-area-inset-bottom)) — and
+       when the safe area resolves late the content box never changes, so a
+       default observer sees nothing and the value stays stale. */
+    if (bar) new ResizeObserver(syncTabBarHeight).observe(bar, {box:'border-box'});
   } else {
     window.addEventListener('resize', syncTabBarHeight);
     window.addEventListener('orientationchange', () => setTimeout(syncTabBarHeight, 250));
