@@ -776,8 +776,17 @@ function adHTML(ad){
 
    It never appears on a bathroom that is simply open, because there the
    user already has what they came for and an ad would only be in the way. */
+/* The place page is the product; the ad on it is decoration. A throw inside
+   the ad code took the whole panel down — tapping a bathroom did nothing at
+   all, because renderDetail never got to build its HTML. Decoration is not
+   allowed to do that, whatever breaks inside it next time. */
+function safeAlternative(f){
+  try { return alternativeHTML(f); }
+  catch(err){ console.warn('alternative slot failed, showing the page without it:', err); return ''; }
+}
+
 function alternativeHTML(f){
-  const st = accessState(f);
+  const st = accessOf(f);
   if (!['locked', 'ask', 'code'].includes(st.cls)) return '';
   const near = Ads.pickSponsor({lat: f.lat, lng: f.lng}, 1200);
   if (!near) return '';
@@ -1003,7 +1012,7 @@ function renderDetail(id, keepScroll){
         <button class="linkbtn" data-act="indoor">${I.nav} ${c.indoor ? 'Update' : 'Add'} how to find it inside</button>
         <button class="linkbtn" data-act="report">${I.flag} Report a problem</button>
       </div>
-      ${alternativeHTML(f)}
+      ${safeAlternative(f)}
     `}
   </div>
 
