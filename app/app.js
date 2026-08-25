@@ -2262,8 +2262,18 @@ function syncTabBarHeight(){
 
 function initSheet(){
   syncTabBarHeight();
-  window.addEventListener('resize', syncTabBarHeight);
-  window.addEventListener('orientationchange', () => setTimeout(syncTabBarHeight, 250));
+  /* A resize listener is not enough: the bar's height also changes when the
+     safe area resolves, when a tab is hidden, or when fonts finish loading,
+     none of which fire resize. Watching the element itself catches all of
+     them — a stale value here leaves the sheet floating above the bar or
+     tucked behind it. */
+  if (window.ResizeObserver){
+    const bar = document.querySelector('.tabbar');
+    if (bar) new ResizeObserver(syncTabBarHeight).observe(bar);
+  } else {
+    window.addEventListener('resize', syncTabBarHeight);
+    window.addEventListener('orientationchange', () => setTimeout(syncTabBarHeight, 250));
+  }
 
   const sheet = el('sheet'), grab = el('grab'), list = el('sheet-list');
   const head = sheet.querySelector('.sheet-head');
