@@ -71,8 +71,18 @@ jobs:
         run: |
           set -o pipefail
           cd ios/App
-          xcodebuild \
-            -workspace App.xcworkspace \
+          # Capacitor 8 moved iOS dependencies from CocoaPods to Swift Package
+          # Manager. With no Podfile there is no pod install and no
+          # App.xcworkspace — the project builds straight from App.xcodeproj.
+          # Older Capacitor still produces a workspace, so use whichever this
+          # checkout actually has rather than assuming either one.
+          if [ -d App.xcworkspace ]; then
+            TARGET=(-workspace App.xcworkspace)
+          else
+            TARGET=(-project App.xcodeproj)
+          fi
+          echo "building with ${TARGET[*]}"
+          xcodebuild "${TARGET[@]}" \
             -scheme App \
             -configuration Debug \
             -sdk iphonesimulator \
