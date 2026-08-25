@@ -98,6 +98,18 @@ ok('Search', 'prefix beats contains',
    L.scoreMatch(feat('Bell & Bean'), 'bell') > L.scoreMatch(feat('The Bell'), 'bell'));
 ok('Search', 'category matches too',  L.scoreMatch(feat('Nowhere'), 'cafe') > 0);
 ok('Search', 'nonsense scores zero',  L.scoreMatch(feat('Bell & Bean'), 'zzzz') === 0);
+/* What a place serves is recorded separately from its name and its
+   category. A search for a food used to fall through to the geocoder,
+   whose best answer for "pizza" is a village in Nigeria called Pizza. */
+const pizzeria = {name:'Tony and Sons', sub:'Restaurant', tags:{cuisine:'pizza'}};
+ok('Search', 'cuisine is searchable',  L.scoreMatch(pizzeria, 'pizza') > 0);
+ok('Search', 'name still outranks cuisine',
+   L.scoreMatch({name:'Pizza Hut', sub:'Restaurant', tags:{}}, 'pizza') > L.scoreMatch(pizzeria, 'pizza'));
+ok('Search', 'brand is searchable',
+   L.scoreMatch({name:'Coffee', sub:'Cafe', tags:{brand:'Starbucks'}}, 'starbucks') > 0);
+ok('Search', 'a feature with no tags is safe',  L.scoreMatch({name:'Bell', sub:'Cafe'}, 'bell') === 100);
+ok('Search', 'multi-word still splits on spaces',
+   L.scoreMatch({name:'Bell and Bean', sub:'Cafe'}, 'bell bean') === 40);
 
 /* ---------- service worker routing ----------
    Service workers cannot be registered in the embedded preview browser, so

@@ -2139,26 +2139,72 @@ async function doSearch(q){
       openDetail(b.dataset.feature);
     }));
   }
+  /* Two geocoder passes, run together.
+
+     The one unbounded query this used to make is why searching for a
+     restaurant kept returning towns: Nominatim ranks administrative areas
+     above businesses whenever a name is ambiguous, so "the anchor" finds a
+     village called Anchor long before the pub on the next street. Biasing
+     one pass to the map you are looking at puts real venues first, and
+     keeping the global pass means you can still jump to another city by
+     name. */
+  const vb = map.getBounds();
+  const viewbox = [vb.getWest(), vb.getNorth(), vb.getEast(), vb.getSouth()]
+    .map(n => n.toFixed(5)).join(',');
+  const ask = extra => fetch(
+      'https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=8&q='
+      + encodeURIComponent(q) + extra, {headers:{'Accept':'application/json'}})
+    .then(r => r.ok ? r.json() : [])
+    .catch(() => []);
+
+  /* A Nominatim result's "type" is the OSM value — restaurant, cafe,
+     supermarket. Showing it is what makes a business look like a business
+     rather than another line of address. */
+  const kindOf = r => {
+    const t = (r.type || '').replace(/_/g, ' ');
+    if (!t || t === 'yes' || /^(administrative|city|town|village|hamlet|suburb|neighbourhood|state|county)$/.test(t)) return '';
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  };
+  const rowFor = r => {
+    const parts = r.display_name.split(', ');
+    const kind = kindOf(r);
+    const where = parts.slice(1, 4).join(', ');
+    return '<button data-lat="' + r.lat + '" data-lon="' + r.lon + '">'
+      + '<b>' + esc(parts[0]) + '</b>'
+      + '<span>' + (kind ? esc(kind) + ' · ' : '') + esc(where) + '</span></button>';
+  };
+
   try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&q=${encodeURIComponent(q)}`,
-                            {headers:{'Accept':'application/json'}});
-    const list = await res.json();
-    const places = Array.isArray(list) ? list : [];
+    const [near, far] = await Promise.all([
+      ask('&viewbox=' + viewbox + '&bounded=1'),
+      ask('')
+    ]);
+
+    /* The same place can come back from both passes. */
+    const seen = new Set();
+    const dedupe = list => (Array.isArray(list) ? list : []).filter(r => {
+      const key = (r.osm_type || '') + '/' + (r.osm_id || (r.lat + ',' + r.lon));
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    const nearby = dedupe(near);
+    const global = dedupe(far);
+
     el('results').innerHTML =
-      (localHTML ? `<div class="reshead">On the map</div>` + localHTML : '') +
-      (places.length
-        ? `<div class="reshead">Places</div>` + places.map(r => {
-            const parts = r.display_name.split(', ');
-            return `<button data-lat="${r.lat}" data-lon="${r.lon}"><b>${esc(parts[0])}</b><span>${esc(parts.slice(1,4).join(', '))}</span></button>`;
-          }).join('')
-        : (localHTML ? '' : `<button disabled style="color:var(--ink-3)">Nothing found for “${esc(q)}”</button>`));
+      (localHTML ? '<div class="reshead">On the map</div>' + localHTML : '') +
+      (nearby.length ? '<div class="reshead">Nearby</div>' + nearby.map(rowFor).join('') : '') +
+      (global.length ? '<div class="reshead">Everywhere</div>' + global.map(rowFor).join('') : '') +
+      ((localHTML || nearby.length || global.length) ? ''
+        : '<button disabled style="color:var(--ink-3)">Nothing found for “' + esc(q) + '”</button>');
     el('results').hidden = false;
     el('results').querySelectorAll('[data-feature]').forEach(b => b.addEventListener('click', () => {
       el('results').hidden = true; el('q').blur(); openDetail(b.dataset.feature);
     }));
     el('results').querySelectorAll('button[data-lat]').forEach(b => b.addEventListener('click', () => {
       el('results').hidden = true; el('q').blur();
-      map.setView([+b.dataset.lat, +b.dataset.lon], 16);
+      map.setView([+b.dataset.lat, +b.dataset.lon], 17);
       scheduleLoad(true);                       // jumping somewhere new should just load it
     }));
   } catch(e){ status('Search is unavailable right now', 3000); }

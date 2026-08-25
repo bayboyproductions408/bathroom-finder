@@ -205,12 +205,22 @@ function scoreMatch(feature, query){
   const q = query.toLowerCase().trim();
   const name = (feature.name || '').toLowerCase();
   const sub  = (feature.sub || '').toLowerCase();
+  /* OSM records what a place serves separately from what it is called, so
+     "pizza" and "sushi" match nothing by name or by category — sub holds
+     "Restaurant", not the food. Without this a search for a kind of food
+     falls through to the geocoder, whose best answer for "pizza" is a
+     village in Nigeria called Pizza. */
+  const t = feature.tags || {};
+  const extra = [t.cuisine, t.brand, t.operator].filter(Boolean).join(' ')
+                  .toLowerCase().replace(/[_;]+/g, ' ');
   if (name === q) return 100;
   if (name.startsWith(q)) return 80;
   if (name.includes(q)) return 60;
   if (sub.includes(q)) return 30;
+  if (extra.includes(q)) return 25;
   const words = q.split(/\s+/);
-  if (words.length > 1 && words.every(w => (name + ' ' + sub).includes(w))) return 40;
+  const hay = name + ' ' + sub + ' ' + extra;
+  if (words.length > 1 && words.every(w => hay.includes(w))) return 40;
   return 0;
 }
 
