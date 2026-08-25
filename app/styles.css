@@ -128,14 +128,23 @@ input,textarea,select{font:inherit; color:inherit}
 .sheet[data-state="half"]{transform:translateY(38%)}
 .sheet[data-state="hidden"]{transform:translateY(100%)}
 .sheet.dragging{transition:none}
-.sheet-grab{flex:0 0 auto; padding:9px 0 4px; display:grid; place-items:center; cursor:grab; touch-action:none}
+.sheet-grab{flex:0 0 auto; padding:15px 0 11px; display:grid; place-items:center; cursor:grab; touch-action:none}
+/* touch-action is NOT inherited, so declaring it on the drag zones alone is
+   not enough — a touch that lands on the grab pill itself, or on the "N
+   places in view" text, hits a child whose computed value is still auto and
+   the browser claims the gesture as a page pan. That is a drag that simply
+   never starts, which is exactly what "stuck at the bottom" feels like. */
+.sheet-grab i, .sheet-head h2{touch-action:none}
 .sheet-grab i{display:block; width:38px; height:4.5px; border-radius:999px; background:var(--line)}
 .sheet-head{flex:0 0 auto; display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:2px 16px 10px;
   touch-action:none; cursor:grab; user-select:none}
 .sheet.dragging .sheet-head, .sheet.dragging .sheet-grab{cursor:grabbing}
 .sheet-head h2{font-size:15.5px; font-weight:800; line-height:1.25}
 .sortbtn{font-size:12px; font-weight:600; color:var(--accent); display:inline-flex; align-items:center; gap:4px; flex:0 0 auto}
-.sheet-list{flex:1 1 auto; overflow-y:auto; padding:0 12px 8px; -webkit-overflow-scrolling:touch}
+.sheet-list{flex:1 1 auto; overflow-y:auto; padding:0 12px 8px; -webkit-overflow-scrolling:touch;
+  /* Stop a pull-down at the top of the list turning into the browser's own
+     overscroll, which cancels the pointer stream and kills the drag. */
+  overscroll-behavior:contain}
 
 /* ===== rows ===== */
 .row{display:grid; grid-template-columns:44px 1fr auto; gap:12px; align-items:center; padding:11px 8px; border-radius:14px; text-align:left; width:100%}

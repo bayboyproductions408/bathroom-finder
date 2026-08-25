@@ -30,6 +30,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The version check diffs against the previous commit, which a
+          # shallow clone does not have.
+          fetch-depth: 2
 
       - uses: actions/setup-node@v4
         with:
@@ -39,6 +43,14 @@ jobs:
         run: |
           node tests/run.js
           node --test tests/api.test.js
+
+      - name: Will anyone already running the app actually get this?
+        # The shell is served cache-first under a cache named after
+        # APP_VERSION. Ship app/ without bumping it and the deploy is real,
+        # the files on the server change, and every existing user keeps the
+        # old app forever. That happened three commits running before this
+        # check existed.
+        run: node tools/check-version-bump.js
 
       - name: Point the app at the backend, if there is one
         env:
