@@ -115,3 +115,33 @@ if (fs.existsSync(ICONSET) && fs.existsSync(SOURCE)){
   }, null, 2));
   console.log('App icon installed from store/appstore-icon-1024.png');
 }
+
+/* iPhone only.
+
+   Capacitor generates a universal app (TARGETED_DEVICE_FAMILY = "1,2"), and
+   Apple then requires a 12.9" iPad screenshot before it will accept the
+   submission — the submission API refuses with
+   STATE_ERROR.SCREENSHOT_REQUIRED.APP_IPAD_PRO_3GEN_129.
+
+   That requirement is the smaller problem. Rendered at 1024x1366 this app is
+   a phone-shaped column floating in a black void, because the layout is
+   built around one thumb reaching a bottom sheet. Shipping that as an iPad
+   app invites a rejection for exactly what it is. Declaring iPhone only is
+   the honest description of what was built, and it removes the screenshot
+   requirement as a side effect rather than as the reason.
+
+   Revisit when there is a real iPad layout to show.                        */
+{
+  const proj = path.join(ROOT, 'ios', 'App', 'App.xcodeproj', 'project.pbxproj');
+  if (fs.existsSync(proj)){
+    let s = fs.readFileSync(proj, 'utf8');
+    const before = (s.match(/TARGETED_DEVICE_FAMILY = "1,2"/g) || []).length;
+    s = s.replace(/TARGETED_DEVICE_FAMILY = "1,2"/g, 'TARGETED_DEVICE_FAMILY = "1"');
+    fs.writeFileSync(proj, s);
+    const after = (s.match(/TARGETED_DEVICE_FAMILY = "1"/g) || []).length;
+    console.log(`Device family: iPhone only (${before} universal target(s) changed, ${after} now "1")`);
+    if (!before && !after) console.warn('!! TARGETED_DEVICE_FAMILY not found — check the generated project');
+  } else {
+    console.warn('!! no project.pbxproj yet — run `npx cap add ios` first');
+  }
+}
