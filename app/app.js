@@ -2250,7 +2250,21 @@ function toast(msg, icon){
   el('toasts').appendChild(t);
   setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 250); }, 2500);
 }
+/* The sheet is positioned above the tab bar, and the tab bar's height
+   depends on the device's safe area — 69px on a plain screen, more on a
+   notched phone. Measure it rather than guessing, and again on rotate. */
+function syncTabBarHeight(){
+  const bar = document.querySelector('.tabbar');
+  if (!bar) return;
+  const h = Math.round(bar.getBoundingClientRect().height);
+  if (h > 0) document.documentElement.style.setProperty('--tabbar-h', h + 'px');
+}
+
 function initSheet(){
+  syncTabBarHeight();
+  window.addEventListener('resize', syncTabBarHeight);
+  window.addEventListener('orientationchange', () => setTimeout(syncTabBarHeight, 250));
+
   const sheet = el('sheet'), grab = el('grab'), list = el('sheet-list');
   const head = sheet.querySelector('.sheet-head');
   const peekPx = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sheet-peek')) || 210;

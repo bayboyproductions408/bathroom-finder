@@ -13,6 +13,9 @@
   --shadow:0 1px 2px rgba(15,30,29,.06), 0 8px 24px rgba(15,30,29,.10);
   --shadow-lg:0 -2px 8px rgba(15,30,29,.06), 0 -18px 44px rgba(15,30,29,.14);
   --sheet-peek:210px;
+  /* Measured from the real tab bar at boot — it changes with the safe area
+     on a notched phone, so a hard-coded guess is wrong on most devices. */
+  --tabbar-h:69px;
 }
 :root[data-theme="dark"]{
   --porcelain:#0B1211; --surface:#141F1E; --surface-2:#1C2827; --surface-3:#101A19;
@@ -115,12 +118,15 @@ input,textarea,select{font:inherit; color:inherit}
 
 /* ===== bottom sheet ===== */
 .sheet{
-  position:absolute; left:0; right:0; bottom:0; z-index:520;
+  /* Sits ON TOP of the tab bar, not under it. The tab bar is z-index 700
+     against the sheet's 520, so anchoring this to bottom:0 hid the bottom
+     69px of the sheet behind it — which is most of what "peek" was supposed
+     to show. One row, clipped mid-text. */
+  position:absolute; left:0; right:0; bottom:var(--tabbar-h); z-index:520;
   background:var(--surface); border-radius:20px 20px 0 0; box-shadow:var(--shadow-lg);
   display:flex; flex-direction:column; height:78%;
   transform:translateY(calc(100% - var(--sheet-peek)));
   transition:transform .34s cubic-bezier(.32,.72,0,1);
-  padding-bottom:calc(70px + env(safe-area-inset-bottom));
 }
 .sheet[data-state="full"]{transform:translateY(0)}
 /* A middle resting place. "Peek" shows about one row, which is not enough to
@@ -290,7 +296,10 @@ textarea.input{height:auto; padding:12px 13px; min-height:92px; resize:vertical;
 /* tabs */
 .tabbar{
   position:absolute; left:0; right:0; bottom:0; z-index:700;
-  display:grid; grid-template-columns:repeat(5,1fr); align-items:center;
+  /* auto-flow rather than repeat(5,1fr): hiding the Host tab left a fifth
+     empty column and shoved the remaining four to the left. display:none
+     items take part in neither, so the row stays even whatever ships. */
+  display:grid; grid-auto-flow:column; grid-auto-columns:1fr; align-items:center;
   padding:8px 6px calc(10px + env(safe-area-inset-bottom));
   background:color-mix(in srgb, var(--surface) 94%, transparent);
   backdrop-filter:blur(12px); border-top:1px solid var(--line-soft);
@@ -434,7 +443,7 @@ textarea.input{height:auto; padding:12px 13px; min-height:92px; resize:vertical;
 .install-btn{
   /* must clear the bottom sheet, which sits at --sheet-peek above the tab bar,
      or it covers the first result */
-  position:absolute; left:12px; bottom:calc(var(--sheet-peek) + 16px + env(safe-area-inset-bottom)); z-index:530;
+  position:absolute; left:12px; bottom:calc(var(--sheet-peek) + var(--tabbar-h) + 16px); z-index:530;
   display:inline-flex; align-items:center; gap:7px; height:38px; padding:0 14px; border-radius:999px;
   background:var(--ink); color:var(--porcelain); font-size:12.5px; font-weight:700; box-shadow:var(--shadow);
 }
