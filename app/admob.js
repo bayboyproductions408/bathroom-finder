@@ -73,8 +73,13 @@ const AdMobNative = (() => {
     try {
       const {status} = await AdMob.trackingAuthorizationStatus();
       if (status === 'notDetermined'){
-        const res = await AdMob.requestTrackingAuthorization();
-        return res.status;
+        /* Plugin 8 resolves this to void, where 6.x resolved to {status}.
+           Reading .status off undefined threw, the catch below turned it
+           into 'error', and every user silently got non-personalised ads —
+           which serve, but pay less. Ask, then read the status back. */
+        await AdMob.requestTrackingAuthorization();
+        const after = await AdMob.trackingAuthorizationStatus();
+        return after.status;
       }
       return status;
     } catch(err){ return 'error'; }

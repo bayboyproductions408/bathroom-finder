@@ -51,10 +51,6 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Drop the native AdMob plugin
-        # Same reason as the TestFlight job: broken upstream against UMP 3.
-        run: npm remove @capacitor-community/admob --no-save || true
-
       - name: Generate the iOS project
         run: |
           npx cap add ios

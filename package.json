@@ -1,6 +1,6 @@
 {
   "name": "bathroom-finder",
-  "version": "1.5.5",
+  "version": "1.6.0",
   "private": true,
   "description": "A worldwide, community-reviewed map of bathrooms",
   "engines": {
@@ -14,16 +14,16 @@
     "cap:sync": "cap sync"
   },
   "devDependencies": {
-    "@capacitor/cli": "^6.2.0"
+    "@capacitor/cli": "^8.5.0"
   },
   "dependencies": {
-    "@capacitor-community/admob": "^6.2.0",
-    "@capacitor/android": "^6.2.0",
-    "@capacitor/camera": "^6.1.0",
-    "@capacitor/core": "^6.2.0",
-    "@capacitor/geolocation": "^6.1.0",
-    "@capacitor/ios": "^6.2.0",
-    "@capacitor/splash-screen": "^6.0.3",
+    "@capacitor-community/admob": "^8.1.0",
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/camera": "^8.2.3",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/geolocation": "^8.2.2",
+    "@capacitor/ios": "^8.5.0",
+    "@capacitor/splash-screen": "^8.0.2",
     "@libsql/client": "^0.15.0"
   }
 }
