@@ -25,9 +25,18 @@ const Ads = (() => {
   const CONSENT_KEY = 'bf.ads.consent.v1';
   const FREQ_KEY    = 'bf.ads.freq.v1';
 
-  /* how often a slot may appear */
-  const LIST_EVERY   = 6;     // one native slot per 6 results, never two in view
-  const MAX_PER_HOUR = 12;    // hard cap on ad renders per hour
+  /* How often a slot may appear.
+
+     Density is the real control for native rows: one every LIST_EVERY
+     results, never two on screen together, never above the first few real
+     bathrooms. The hourly cap is a backstop against a pathological loop,
+     not the thing shaping the experience — at 12 it was, because a single
+     scroll through a long list would have exhausted it and shown nothing
+     for the rest of the hour. */
+  const LIST_EVERY   = 8;     // one native slot per 8 results
+  const LIST_MAX     = 6;     // never more than this many in one rendered list
+  const LIST_SKIP    = 3;     // the first 3 results are always real places
+  const MAX_PER_HOUR = 60;    // backstop only
 
   let consent = null;
   try { consent = JSON.parse(localStorage.getItem(CONSENT_KEY) || 'null'); } catch(e){}
@@ -119,6 +128,43 @@ const Ads = (() => {
     return {...h};
   }
 
-  return {slot, setSponsors, pickSponsor, isPlus, hasConsent, setConsent, consentAsked,
-          LIST_EVERY, HOUSE, get consent(){ return consent; }};
+  /* Several distinct fills at once, for a list that is long enough to hold
+     more than one. Never repeats a card within the batch: the same house ad
+     six times reads as a broken app, not as advertising. That also means a
+     short bench honestly yields fewer ads rather than the same one padded
+     out — with no sponsors sold, a 120-row list carries three house cards,
+     not six copies of one. */
+  async function slots(n = 1, context = {}){
+    if (isPlus() || !underCap() || n < 1) return [];
+    const out = [], origin = context.origin;
+
+    if (origin && sponsors.length){
+      const near = sponsors
+        .map(s => ({s, d: haversine(origin, {lat:s.lat, lng:s.lng})}))
+        .filter(x => x.d <= (context.maxMetres || 1500))
+        .sort((a, b) => a.d - b.d)
+        .slice(0, n);
+      for (const x of near) out.push({...x.s, distance: x.d, kind:'sponsored'});
+    }
+
+    if (out.length < n && hasConsent()){
+      const net = await fetchNetworkAd();
+      if (net) out.push({...net, kind:'network'});
+    }
+
+    /* House ads fill what is left, rotated by the clock so the same slot is
+       not the same card every time, and each used at most once. */
+    const f = window.BF_FEATURES || {};
+    const pool = HOUSE.filter(x => x.action !== 'plus' || f.plus);
+    const start = Math.floor(Date.now() / 60000);
+    for (let i = 0; i < pool.length && out.length < n; i++){
+      out.push({...pool[(start + i) % pool.length]});
+    }
+
+    for (let i = 0; i < out.length; i++) bumpFreq();
+    return out;
+  }
+
+  return {slot, slots, setSponsors, pickSponsor, isPlus, hasConsent, setConsent, consentAsked,
+          LIST_EVERY, LIST_MAX, LIST_SKIP, HOUSE, get consent(){ return consent; }};
 })();

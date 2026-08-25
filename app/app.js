@@ -127,7 +127,7 @@ const features = new Map();
 const state = {cats:new Set(['toilets','food','lodging','shop','fuel','civic',
                              ...(FEATURES.rentals ? ['host'] : [])]), attrs:new Set(),
                sort:'dist', center:null, me:null, sel:null, dropMode:null, panel:null, listCache:[],
-               sponsors:[], currentAd:null, listSignature:null};
+               sponsors:[], currentAd:null, listAds:[], listSignature:null};
 const fetched = [];
 
 /* ---------- theme ---------- */
@@ -766,39 +766,66 @@ function adHTML(ad){
     <button class="minibtn adcta" data-adcta="${esc(ad.id)}">${esc(ad.cta || 'Open')}</button>
   </div>`;
 }
-function wireAd(root){
-  const el2 = root.querySelector('[data-ad]');
-  if (!el2) return;
-  const id = el2.dataset.ad, kind = el2.dataset.adkind;
-  /* count the impression once it has actually been on screen */
-  if (kind === 'sponsored' && 'IntersectionObserver' in window){
-    const io = new IntersectionObserver(entries => {
-      for (const e of entries) if (e.isIntersecting){
-        io.disconnect();
-        fetch(apiURL('/api/v1/sponsors/impression'), {method:'POST',
-          headers:{'Content-Type':'application/json'}, body:JSON.stringify({id})}).catch(()=>{});
-      }
-    }, {threshold:0.6});
-    io.observe(el2);
-  }
-  const cta = root.querySelector('[data-adcta]');
-  if (cta) cta.addEventListener('click', e => {
-    e.stopPropagation();
-    if (kind === 'sponsored'){
-      fetch(apiURL('/api/v1/sponsors/click'), {method:'POST',
-        headers:{'Content-Type':'application/json'}, body:JSON.stringify({id})}).catch(()=>{});
-      const s = (state.sponsors || []).find(x => x.id === id);
-      if (s) map.setView([s.lat, s.lng], 17);
-      toast('Showing ' + (s ? s.business : 'the sponsor'), I.nav);
-    } else {
-      const action = (Ads.HOUSE.find(h => h.id === id) || {}).action;
-      if (action === 'sponsor') openAdvertise();
-      else if (action === 'plus') openPlus();
-      else if (action === 'add') startDropMode('add', pt => openAddForm(pt));
-    }
-  });
+/* An alternative, shown only when this bathroom is one you probably cannot
+   just walk into — reported locked, private, customers-only, or paid.
+
+   This is the most valuable ad position in the app and also the most
+   useful thing on the screen at that moment: the user is standing at a
+   door that will not open, and the answer they want is somewhere else to
+   go. A café that has paid to be found is a better answer than nothing.
+
+   It never appears on a bathroom that is simply open, because there the
+   user already has what they came for and an ad would only be in the way. */
+function alternativeHTML(f){
+  const st = accessState(f);
+  if (!['locked', 'ask', 'code'].includes(st.cls)) return '';
+  const near = Ads.pickSponsor({lat: f.lat, lng: f.lng}, 1200);
+  if (!near) return '';
+  return `<div class="altwrap">
+    <div class="altlead">${I.nav} <span>Cannot get in? Nearby:</span></div>
+    ${adHTML({...near, kind:'sponsored'})}
+  </div>`;
 }
 
+function wireAds(root){
+  /* Every ad in the list, not just the first. This took querySelector when
+     a list carried one ad; with several, only the first would have counted
+     an impression and only its button would have worked — the rest would
+     have been dead controls that still looked live. */
+  for (const slot of root.querySelectorAll('[data-ad]')){
+    const id = slot.dataset.ad, kind = slot.dataset.adkind;
+
+    /* count the impression once it has actually been on screen */
+    if (kind === 'sponsored' && 'IntersectionObserver' in window){
+      const io = new IntersectionObserver(entries => {
+        for (const e of entries) if (e.isIntersecting){
+          io.disconnect();
+          fetch(apiURL('/api/v1/sponsors/impression'), {method:'POST',
+            headers:{'Content-Type':'application/json'}, body:JSON.stringify({id})}).catch(()=>{});
+        }
+      }, {threshold:0.6});
+      io.observe(slot);
+    }
+
+    /* scoped to this card, so one ad's button cannot bill another's id */
+    const cta = slot.querySelector('[data-adcta]');
+    if (cta) cta.addEventListener('click', e => {
+      e.stopPropagation();
+      if (kind === 'sponsored'){
+        fetch(apiURL('/api/v1/sponsors/click'), {method:'POST',
+          headers:{'Content-Type':'application/json'}, body:JSON.stringify({id})}).catch(()=>{});
+        const sp = (state.sponsors || []).find(x => x.id === id);
+        if (sp) map.setView([sp.lat, sp.lng], 17);
+        toast('Showing ' + (sp ? sp.business : 'the sponsor'), I.nav);
+      } else {
+        const action = (Ads.HOUSE.find(h => h.id === id) || {}).action;
+        if (action === 'sponsor') openAdvertise();
+        else if (action === 'plus') openPlus();
+        else if (action === 'add') startDropMode('add', pt => openAddForm(pt));
+      }
+    });
+  }
+}
 function renderList(){
   const rows = listFeatures();
   state.listCache = rows;
@@ -815,13 +842,28 @@ function renderList(){
      first thing on screen is always a real bathroom. */
   let body;
   if (!rows.length){
-    body = `<div class="empty"><h3>${map.getZoom() < 13 ? 'Pick a place to start' : 'Nothing here yet'}</h3>
-       <p>${map.getZoom() < 13 ? 'Search a city above, or tap the crosshair to jump to where you are.'
+    const far = map.getZoom() < 13;
+    body = `<div class="empty"><h3>${far ? 'Pick a place to start' : 'Nothing here yet'}</h3>
+       <p>${far ? 'Search a city above, or tap the crosshair to jump to where you are.'
          : 'No mapped bathrooms in this view. If you know one, add it — you will be the first.'}</p></div>`;
+    /* An empty view is the one moment the app has nothing useful to say, and
+       the one moment the user most needs somewhere to go. A nearby business
+       that will let them in is the most useful thing that can be on this
+       screen — and it is worth more here than anywhere else in the app. */
+    if (!far && state.listAds.length) body += adHTML(state.listAds[0]);
   } else {
     const html = rows.map(rowHTML);
-    if (state.currentAd && html.length > 2)
-      html.splice(Math.min(Ads.LIST_EVERY, html.length), 0, adHTML(state.currentAd));
+    /* Spread the fills through the list instead of dropping one at row 6 and
+       stopping. A 120-row list used to carry a single ad. The first
+       LIST_SKIP results are always real places — the top of the list is
+       never for sale. */
+    let placed = 0;
+    for (const ad of state.listAds){
+      const at = Ads.LIST_SKIP + placed * (Ads.LIST_EVERY + 1);
+      if (at > html.length || placed >= Ads.LIST_MAX) break;
+      html.splice(at, 0, adHTML(ad));
+      placed++;
+    }
     body = html.join('');
   }
   /* Background syncs call this every few seconds. Rebuilding the list when
@@ -831,7 +873,7 @@ function renderList(){
   const list = el('sheet-list');
   const signature = [
     rows.map(r => r.f.id).join(','),
-    state.currentAd && state.currentAd.id,
+    state.listAds.map(a => a.id).join(','),
     state.sort, [...state.cats].join(''), [...state.attrs].join(''),
     store.saved.join(','), Ads.isPlus() ? 'plus' : ''
   ].join('|');
@@ -842,7 +884,7 @@ function renderList(){
   list.innerHTML = body;
   list.scrollTop = keepScroll;
   wireRows(list);
-  wireAd(list);
+  wireAds(list);
   const sc = el('savecount');
   sc.textContent = store.saved.length; sc.hidden = store.saved.length === 0;
 }
@@ -961,6 +1003,7 @@ function renderDetail(id, keepScroll){
         <button class="linkbtn" data-act="indoor">${I.nav} ${c.indoor ? 'Update' : 'Add'} how to find it inside</button>
         <button class="linkbtn" data-act="report">${I.flag} Report a problem</button>
       </div>
+      ${alternativeHTML(f)}
     `}
   </div>
 
@@ -1013,6 +1056,9 @@ function renderDetail(id, keepScroll){
   </div>`;
 
   body.scrollTop = prev;
+  /* The alternative card is a real ad: it must count its impression and
+     its click like any other, or it earns nothing. */
+  wireAds(body);
   body.querySelectorAll('[data-close-panel]').forEach(b => b.addEventListener('click', closePanel));
   body.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
     const a = b.dataset.act;
@@ -1808,8 +1854,12 @@ async function refreshSponsors(){
   await refreshAd();
 }
 async function refreshAd(){
-  try { state.currentAd = await Ads.slot({origin: state.me || (map && map.getCenter())}); }
-  catch(e){ state.currentAd = null; }
+  try {
+    const origin = state.me || (map && map.getCenter());
+    state.listAds = await Ads.slots(Ads.LIST_MAX, {origin});
+    state.currentAd = state.listAds[0] || null;
+  }
+  catch(e){ state.listAds = []; state.currentAd = null; }
 }
 
 /* The pitch to a business. This is the revenue line that is actually worth
@@ -1876,7 +1926,8 @@ function openPlus(){
   const on = el('plus-on'), off = el('plus-off');
   if (on) on.addEventListener('click', () => {
     try { localStorage.setItem('bf.plus','1'); } catch(e){}
-    state.currentAd = null; if (typeof AdMobNative !== 'undefined') AdMobNative.hideBanner();
+    state.currentAd = null; state.listAds = [];
+    if (typeof AdMobNative !== 'undefined') AdMobNative.hideBanner();
     closeModal(); renderList(); renderProfile();
     toast('Plus is on — no more ads', I.sparkle);
   });
