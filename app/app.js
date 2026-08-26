@@ -183,8 +183,14 @@ function initMap(){
    Several popular Overpass mirrors (kumi.systems, osm.jp) do not, so they
    fail CORS and can never serve as a fallback from a web app — checked,
    not assumed. When the main instance returns 429 the second one takes over. */
-const ENDPOINTS = ['https://overpass-api.de/api/interpreter',
-                   'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+/* One endpoint. There used to be a second, a public Overpass mirror hosted
+   at maps.mail.ru, kept as a fallback for when the main instance returns
+   429. Measured against both with the same query: overpass-api.de answered
+   in 4.8s, the mirror in 40s — against the 20s abort a few lines below.
+   It could never have returned in time, so it was disclosed-but-dead: a
+   Russian-hosted data path in a US consumer app that earned nothing. The
+   server-side tile cache now absorbs most of this load anyway. */
+const ENDPOINTS = ['https://overpass-api.de/api/interpreter'];
 let loadTimer = null, loading = false;
 
 /* Load whatever the user is looking at, once they stop moving.

@@ -139,19 +139,13 @@ specifics and it should match the recording.)*
 
 ---
 
-## One decision for Dom before replying
+## Note on the Overpass mirror — decided and done
 
-`app/app.js` lists a second Overpass mirror as a fallback:
+The app used to fall back to a public Overpass mirror at maps.mail.ru when
+the main instance rate-limited. Measured with the same query against both:
+overpass-api.de answered in 4.8s, the mirror in 40s — against the app's own
+20-second abort. It could never have returned in time, so it was dead code
+that would still have had to be disclosed.
 
-    https://maps.mail.ru/osm/tools/overpass/api/interpreter
-
-It is a legitimate public OpenStreetMap mirror, and it is only used when the
-main Overpass instance is rate-limiting. But it is Russian-hosted, and item 5
-requires disclosing every external service. Two options:
-
-1. **Disclose it** — add it to the list above. Honest, and it is only a map
-   data mirror.
-2. **Remove it** — the backend cache now serves most requests, so the
-   fallback matters far less than it did. One line, one rebuild.
-
-Removing it is the simpler story to tell App Review. Say which and it is done.
+Removed in 1.6.4. The service list in item 5 above is now complete and
+accurate for the submitted binary.
