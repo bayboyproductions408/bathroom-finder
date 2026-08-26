@@ -23,7 +23,8 @@ Apple's requirements, exactly:
   - **content reporting and blocking** — the Report control on a listing,
     review or photo
 
-Build **1.6.3 (26)** is already in TestFlight. Install from there and film.
+Build **1.6.4 (27)** is in TestFlight and its release note says FILM THIS ONE.
+Install that build and film it — it is the binary now attached to the submission.
 
 Suggested two-minute run:
 1. Launch. Allow location. The map fills with places around you.
@@ -38,9 +39,16 @@ No account, no login, no paid content — so nothing to demonstrate there.
 
 ---
 
+## Already done — no need to paste these
+
+Items 2 to 7 have been written into **App Review Information → Notes**
+(3,521 characters), which is where Apple's message asked for them. The
+Resolution Center reply therefore only needs the screen recording plus a
+short covering line. The text is kept below for reference.
+
 ## 2. Devices and operating systems tested
 
-> Bathroom Finder 1.6.3 (build 26) was tested on iPhone via TestFlight on the
+> Bathroom Finder 1.6.4 (build 27) was tested on iPhone via TestFlight on the
 > current release of iOS, and in the iOS Simulator on the latest iPhone
 > runtime available on macOS 15 with Xcode 26. Every build additionally runs
 > an automated launch check that installs the app on a simulator, grants
