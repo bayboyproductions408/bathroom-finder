@@ -108,22 +108,81 @@ Location, Device ID and Advertising Data, which are Third-Party Advertising.
   (AdSense, United States) exists and shows no warnings.
 - **Agreements, bank account and W-9** are all active already.
 
-### The one human step left
+### What iOS is waiting on
 
-**`APPSTORE_PRIVATE_KEY`** — the `.p8` App Store Connect key, at
-`C:\Dom\Claude\dev-tools\ios-signing\flappy-birdies\AuthKey_399645T965.p8`.
-Same Apple team as Flappy Birdies, so the same key works here.
+The signing key is in, the pipeline works, and **build 27 (v1.6.4) is in
+TestFlight and attached to the 1.6.4 version record.** Its release note says
+FILM THIS ONE.
 
-Put it on the clipboard without it ever appearing on screen:
+Apple's reply was **Guideline 2.1, Information Needed** — not a defect. Six of
+the seven things they asked for are now written into *App Review Information →
+Notes* (3,521 characters), which is where their message asked for them.
 
-    Get-Content "C:\Dom\Claude\dev-tools\ios-signing\flappy-birdies\AuthKey_399645T965.p8" | Set-Clipboard
+The seventh cannot be done from here:
 
-then paste into the repo's *New repository secret* form, named exactly
-`APPSTORE_PRIVATE_KEY`. A signing key is the one credential that should pass
-from your file to GitHub and touch nothing in between.
+> **A screen recording, on a physical device, running current iOS.** It has to
+> start with the app launching and walk through the core features. Because this
+> app has them, it must also show the location prompt, the App Tracking
+> Transparency prompt, writing a review, adding a photo, and the Report control.
 
-After that, run the **iOS TestFlight** workflow from the Actions tab and add
-`dfh1012@hotmail.com` as an internal tester in App Store Connect.
+Install build 27 from TestFlight, film about two minutes, and the reply to
+Resolution Center only needs the video plus a covering line. The suggested run
+is in APP-REVIEW-REPLY.md.
+
+---
+
+## Google Play submission
+
+Play record: **Bathroom Finder Nearby**, `com.bathroomfinder.app`, developer
+account 6952509614571178776.
+
+### Done
+
+| | |
+|---|---|
+| Content rating | IARC questionnaire completed. Comes out **ESRB Teen**, Brazil 12+, descriptor *Users Interact* — the honest consequence of declaring user-generated content as primary and publicly shared |
+| Target audience | 18 and over. The "restrict minors" option was deliberately left off: blocking teens from downloading a bathroom map costs reach for no policy benefit |
+| Advertising ID | Declared **yes**, purposes Advertising and Fraud prevention — true only because the Android build now actually ships the ad SDK, see below |
+| Government apps | No |
+| Financial features | None |
+| Health apps | None |
+| Data safety | Completed against the code rather than from memory, see the table below |
+| App category | Maps & Navigation |
+| Contact details | The same support address the app itself publishes, plus the site |
+| Store listing | Name, short and full description, 512px icon, 1024×500 feature graphic, three 1080×1920 phone screenshots. AI asset declaration: not labelled — the artwork is drawn by `tools/make-store-assets.js`, a hand-written PNG encoder, and the screenshots are real captures |
+
+**Data safety, as declared.** Approximate location, collected *and* shared, for
+app functionality and advertising. Precise location: **not collected** — the GPS
+fix sorts results on-device and never leaves the phone. Name, email address,
+phone number and user IDs: collected, not shared, optional. Photos and
+user-generated content: collected, not shared, optional. App interactions:
+collected, required. Device or other IDs: collected and shared with Google,
+required. Everything is encrypted in transit; there is no account; the deletion
+route is the privacy page.
+
+Filling that form is what surfaced two real bugs, both now fixed and pushed —
+see the commits. The Android build had been shipping with the ad SDK stripped
+out by the workflow and with fine location undeclared, and the advertising
+enquiry was posting a metre-accurate position next to the sender's email.
+
+### What Play is waiting on
+
+The setup checklist is complete and the console no longer lists an outstanding
+declaration. *Send app for review* is still locked, because there is no release
+yet, and that needs two things only you can do:
+
+1. **Four repository secrets**, so the Android workflow can sign the bundle:
+   `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
+   `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Without them the build still
+   runs, but produces an unsigned bundle that Play will not accept.
+   `node tools/make-keystore.js` creates the key if it does not exist yet.
+
+2. **Twelve closed testers, opted in for fourteen consecutive days.** This is a
+   personal-account rule and it gates production for every app on the account —
+   Flappy Birdies is stuck on the same requirement with one tester. Recruit
+   twelve people once and they clear all three apps. The details, including the
+   difference between *invited* and *opted in*, are in CLOSED-TEST-RECRUITING.md.
+
 
 ## Revenue, honestly
 
