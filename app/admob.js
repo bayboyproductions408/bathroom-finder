@@ -25,10 +25,8 @@ const AdMobNative = (() => {
       banner: 'ca-app-pub-9072066961806430/9430292092'
     },
     android: {
-      /* filled in when the Play listing exists; until then Android falls
-         back to the in-app sponsored slot rather than showing test ads */
-      appId:  '',
-      banner: ''
+      appId:  'ca-app-pub-9072066961806430~3321454406',
+      banner: 'ca-app-pub-9072066961806430/4120364905'
     }
   };
 

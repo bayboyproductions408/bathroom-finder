@@ -94,21 +94,93 @@ if (fs.existsSync(SOURCE)){
   console.log('icon: store/icon-512.png missing — run tools/make-icons.js');
 }
 
-/* ---- 4. permissions -----------------------------------------------------
-   The Geolocation and Camera plugins declare their own permissions and those
-   merge in automatically. What does NOT merge is the coarse-location fallback
-   some devices need when precise is denied, so state it explicitly. */
+/* ---- 4. manifest --------------------------------------------------------
+   Capacitor regenerates this file on every `cap add android`, so nothing here
+   can be committed — it has to be re-applied on each build.
+
+   The note that used to sit here said the Geolocation and Camera plugins
+   "declare their own permissions and those merge in automatically". They do
+   not. @capacitor/geolocation ships an AndroidManifest.xml holding an empty
+   <manifest> element and nothing else, so the permissions are the app's own
+   responsibility. Only coarse was being declared, which means every Android
+   fix was accurate to a kilometre or two — on a screen whose entire job is
+   answering "which of these is nearest", that is a wrong answer rather than
+   a slightly vague one.
+
+   AD_ID is required from Android 13 onward for an ads SDK to read the
+   advertising identifier at all. Without it the id reads back as zeroes, and
+   Play blocks any release whose Advertising ID declaration says the app uses
+   one.
+
+   APPLICATION_ID is not optional either: the Google Mobile Ads SDK throws
+   during initialisation when the meta-data is missing, which on Android is a
+   crash on launch, not a missing banner. iOS gets the same value through
+   GADApplicationIdentifier in prepare-ios.js; this is its counterpart. */
 const MANIFEST = path.join(APP, 'src', 'main', 'AndroidManifest.xml');
+
+/* app/admob.js already carries the ids that ship inside the binary, so read
+   them from there. One source of truth is what stops the manifest and the
+   JavaScript drifting into the state where the id is set in one and an empty
+   string in the other. */
+function androidAdMobAppId(){
+  if (process.env.ADMOB_ANDROID_APP_ID) return process.env.ADMOB_ANDROID_APP_ID;
+  try {
+    const js = fs.readFileSync(path.join(ROOT, 'app', 'admob.js'), 'utf8');
+    const block = js.slice(js.indexOf('android: {'));
+    const m = block.match(/appId:\s*'([^']*)'/);
+    return m ? m[1] : '';
+  } catch(e){ return ''; }
+}
+
 if (fs.existsSync(MANIFEST)){
+  const ADMOB_APP_ID = androidAdMobAppId();
   let m = fs.readFileSync(MANIFEST, 'utf8');
-  const want = ['android.permission.ACCESS_COARSE_LOCATION', 'android.permission.INTERNET'];
+  const want = [
+    'android.permission.INTERNET',
+    'android.permission.ACCESS_COARSE_LOCATION',
+    'android.permission.ACCESS_FINE_LOCATION',
+    'com.google.android.gms.permission.AD_ID'
+  ];
   let added = 0;
   for (const p of want){
     if (!m.includes(p)){
-      m = m.replace('</manifest>', `    <uses-permission android:name="${p}" />\n</manifest>`);
+      m = m.replace('</manifest>', '    <uses-permission android:name="' + p + '" />\n</manifest>');
       added++;
     }
   }
-  if (added) fs.writeFileSync(MANIFEST, m);
-  console.log(`manifest: ${added} permission(s) added`);
+
+  if (ADMOB_APP_ID){
+    if (m.includes('com.google.android.gms.ads.APPLICATION_ID')){
+      m = m.replace(/(APPLICATION_ID"[\s\S]{0,80}?android:value=")[^"]*(")/, '$1' + ADMOB_APP_ID + '$2');
+    } else {
+      m = m.replace('</application>',
+        '    <meta-data\n' +
+        '            android:name="com.google.android.gms.ads.APPLICATION_ID"\n' +
+        '            android:value="' + ADMOB_APP_ID + '" />\n' +
+        '    </application>');
+      added++;
+    }
+    console.log('manifest: AdMob app id ' + ADMOB_APP_ID);
+  } else {
+    /* Having no id yet is a supported state — admob.js falls back to the
+       in-app sponsored slot — but shipping the SDK without the meta-data is
+       not, so say so rather than quietly building something that crashes. */
+    console.log('manifest: no Android AdMob app id set, APPLICATION_ID skipped');
+  }
+
+  fs.writeFileSync(MANIFEST, m);
+  console.log('manifest: ' + added + ' entr(ies) added');
+
+  /* Assert instead of trusting the replaces. A regex that silently misses
+     here produces a bundle that crashes on launch, and that only shows up on
+     a real device, days later, in a review queue. */
+  const missing = want.filter(p => !m.includes(p));
+  if (missing.length){
+    console.error('::error::manifest is missing ' + missing.join(', '));
+    process.exit(1);
+  }
+  if (ADMOB_APP_ID && !m.includes('android:value="' + ADMOB_APP_ID + '"')){
+    console.error('::error::AdMob app id never reached the manifest');
+    process.exit(1);
+  }
 }

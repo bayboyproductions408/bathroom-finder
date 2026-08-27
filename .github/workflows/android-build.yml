@@ -52,13 +52,6 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Drop the native AdMob plugin
-        # Same reason as iOS: @capacitor-community/admob 6.2 pins an ad SDK that
-        # pulls a consent SDK whose API it predates. It shows no ads until the
-        # app is published and the AdMob account reviewed, so it costs nothing
-        # here, and admob.js already no-ops when the plugin is absent.
-        run: npm remove @capacitor-community/admob --no-save || true
-
       - name: Generate the Android project
         # No "|| true" here. Swallowing this hid a real failure once: android/
         # existed (a stray committed .gitignore), cap add refused in 0s, and the
