@@ -1909,7 +1909,14 @@ function openAdvertise(){
     try {
       const r = await fetch(apiURL('/api/v1/lead'), {method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({business, contact, note:el('ad-note').value.trim(),
-                              lat:c && c.lat, lng:c && c.lng})});
+                              /* Same two decimals the sponsors query uses, and for the
+                                 same reason. What this is for is 'roughly whereabouts is
+                                 this business', which a kilometre answers. At full
+                                 precision it was posting a metre-accurate fix of where
+                                 the sender is standing next to their email address —
+                                 the map centres on you the moment you tap the
+                                 crosshair. */
+                              lat:c && +c.lat.toFixed(2), lng:c && +c.lng.toFixed(2)})});
       if (!r.ok) throw new Error((await r.json()).error);
       closeModal(); toast('Thanks — we will be in touch', I.check);
     } catch(err){ toast(String(err.message || 'Could not send that'), I.flag); }
