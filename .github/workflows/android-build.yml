@@ -51,7 +51,12 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          # Capacitor 8's own Gradle module compiles with
+          # sourceCompatibility JavaVersion.VERSION_21. On 17 the build dies at
+          # :capacitor-android:compileReleaseJavaWithJavac with 'invalid source
+          # release: 21'. This said 17 from the Capacitor 6 days and nothing
+          # caught it, because the last Android run predated the upgrade.
+          java-version: '21'
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
