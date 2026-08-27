@@ -25,7 +25,11 @@ name: Android build
 on:
   workflow_dispatch:
   push:
-    tags: ['v*']
+    # 'v*' is the joint release tag. 'android-v*' exists so Android can be
+    # built on its own: the shared tag also fires ios-testflight.yml, and there
+    # are times — a build already sitting in review, for one — when uploading a
+    # new iOS binary is exactly what you do not want.
+    tags: ['v*', 'android-v*']
 
 jobs:
   build:
