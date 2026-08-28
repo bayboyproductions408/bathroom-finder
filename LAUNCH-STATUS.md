@@ -83,7 +83,7 @@ App Store Connect record: **Bathroom Finder Nearby**, Apple ID `6804091512`.
 | | |
 |---|---|
 | Durable storage | Turso, verified against a real service restart |
-| Screenshots | 9 at exact store sizes, `node tools/make-screenshots.js` regenerates them |
+| Screenshots | 9 generated at exact store sizes by `node tools/make-screenshots.js`; the 6.5" and 6.7" sets (3 each) are uploaded and COMPLETE |
 | Age rating | Completed. Apple calculates **4+** — 172 countries, A12 Brazil, ALL Korea, 00+ Vietnam |
 | Privacy policy URL | Set to the published page; all three legal pages return 200 |
 | App Privacy labels | Completed and **published** to the product page |
@@ -91,11 +91,19 @@ App Store Connect record: **Bathroom Finder Nearby**, Apple ID `6804091512`.
 | `APPSTORE_KEY_ID` | In the repo's Actions secrets |
 | `APPSTORE_ISSUER_ID` | In the repo's Actions secrets, with the correct `92a3` |
 
-**Privacy labels as published.** *Data Used to Track You:* Identifiers (Device ID)
-and Usage Data (Advertising Data) — both because of AdMob. *Data Not Linked to
-You:* Name, Coarse Location, Photos or Videos, Customer Support, Other User
-Content, User ID. Purposes are App Functionality throughout, except Coarse
-Location, Device ID and Advertising Data, which are Third-Party Advertising.
+**Privacy labels as published** (10 data types). *Data Used to Track You:*
+Identifiers (Device ID) and Usage Data (Advertising Data) — both because of
+AdMob. *Data Linked to You:* Contact Info — Email Address and Phone Number, from
+the advertising enquiry form, for App Functionality and the developer's own
+advertising or marketing, not for tracking. *Data Not Linked to You:* Name,
+Coarse Location, Photos or Videos, Customer Support, Other User Content, User
+ID. Purposes are App Functionality throughout, except Coarse Location, Device ID
+and Advertising Data, which are Third-Party Advertising.
+
+Email and phone were added on 2026-08-27. They had been missing, and Apple's
+optional-disclosure exemption does not cover them: it excludes any data used for
+the developer's own advertising or marketing, and the whole point of that form
+is that we contact the business about a paid listing.
 
 ### Three things that turned out not to be blockers
 
@@ -110,24 +118,38 @@ Location, Device ID and Advertising Data, which are Third-Party Advertising.
 
 ### What iOS is waiting on
 
-The signing key is in, the pipeline works, and **build 27 (v1.6.4) is in
-TestFlight and attached to the 1.6.4 version record.** Its release note says
-FILM THIS ONE.
+Version **1.6.7**, build **29**, is attached, and every field App Store Connect
+gates on has been read back off the API and passes: build VALID and not expired,
+export compliance answered, review contact and notes present, no demo account
+needed, description, keywords, support and marketing URLs, and screenshots at
+both 6.5 and 6.7 inches.
 
 Apple's reply was **Guideline 2.1, Information Needed** — not a defect. Six of
-the seven things they asked for are now written into *App Review Information →
-Notes* (3,521 characters), which is where their message asked for them.
+the seven things they asked for are in *App Review Information → Notes*.
 
 The seventh cannot be done from here:
 
 > **A screen recording, on a physical device, running current iOS.** It has to
-> start with the app launching and walk through the core features. Because this
-> app has them, it must also show the location prompt, the App Tracking
-> Transparency prompt, writing a review, adding a photo, and the Report control.
+> start with the app launching and walk the core features, and because this app
+> has them it must also show the location prompt, the App Tracking Transparency
+> prompt, writing a review, adding a photo, and the Report control.
 
-Install build 27 from TestFlight, film about two minutes, and the reply to
-Resolution Center only needs the video plus a covering line. The suggested run
-is in APP-REVIEW-REPLY.md.
+Install build 29 from TestFlight and film about two minutes. Then
+`node tools/attach-review-video.js <file>` puts it on the submission itself,
+where the reviewer sees it rather than in a message thread. The shot list and a
+ready-to-send Resolution Center reply are both in APP-REVIEW-REPLY.md.
+
+**What the audit caught.** Reading the submission back rather than trusting
+memory turned up five problems. The version record still said 1.6.4 and had no
+subtitle. Only 6.5-inch screenshots existed, so Apple was upscaling them for
+every modern iPhone. And the app was telling Apple two untrue things: the
+advertising enquiry posted a metre-accurate position while the privacy label
+said precise location is never collected, and the privacy page claimed we could
+not contact you when that same form collects an email address. The label now
+declares Contact Info: Email Address and Phone Number — Apple's optional
+disclosure rule excludes anything used for the developer's own marketing, which
+this is — and build 29 is the first binary where the code, the privacy page and
+the App Store label all say the same thing.
 
 ---
 
