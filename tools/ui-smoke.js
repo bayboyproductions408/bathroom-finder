@@ -159,9 +159,13 @@ async function main(){
     /* 3. THE ONE THAT MATTERS: tap a place and see its page */
     const detail = await evaluate(`(async () => {
       const wait = ms => new Promise(r => setTimeout(r, ms));
-      const row = document.querySelector('#sheet-list [data-id]')
-               || document.querySelector('#sheet-list button, #sheet-list .row');
-      if (!row) return {ok:false, why:'no row to tap'};
+      /* The list row really is <button class="row" data-open="…">. This used to
+         try [data-id] first and fall back to any button, which matched nothing
+         and then worked by accident — so the test was not clicking the control
+         it claimed to be clicking, and a markup change could have sent it at
+         something else entirely without failing. */
+      const row = document.querySelector('#sheet-list button.row[data-open]');
+      if (!row) return {ok:false, why:'no button.row[data-open] to tap'};
       row.click();
       await wait(1200);
       const panel = document.getElementById('panel-detail');
