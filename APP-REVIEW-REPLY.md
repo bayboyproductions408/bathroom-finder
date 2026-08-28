@@ -1,159 +1,119 @@
-# Reply to App Review — Guideline 2.1, Information Needed
+# Getting Bathroom Finder through App Review
 
-Apple did not find a defect. This is the standard information request for a
-first submission. Paste items 2–7 below into **Reply to App Review**, and
-attach the screen recording for item 1.
-
-Also paste the same text into **App Review Information → Notes** so future
-submissions do not get asked again.
+Apple did not find a defect. Their reply was **Guideline 2.1 — Information
+Needed**, which is the standard request on a first submission. Everything they
+asked for is now in place except one thing that has to happen on a phone.
 
 ---
 
-## 1. Screen recording — Dom has to film this
+## The one step that needs you
 
-Apple's requirements, exactly:
+**A screen recording, on a physical device, running current iOS.**
 
-- On a **physical device**, running the **latest iOS**
-- Starts with **launching the app**
-- Shows the **typical user flow through the core features**
-- Must include, because this app has them:
-  - the **location permission prompt** (appears on launch)
-  - the **App Tracking Transparency prompt** (appears before any ad)
-  - **user-generated content** — writing a review, adding a photo
-  - **content reporting and blocking** — the Report control on a listing,
-    review or photo
+Apple's requirements, exactly as they stated them:
 
-Build **1.6.4 (27)** is in TestFlight and its release note says FILM THIS ONE.
-Install that build and film it — it is the binary now attached to the submission.
+- on a **real device**, not the simulator
+- starts with **launching the app**
+- shows the **typical user flow through the core features**
 
-Suggested two-minute run:
-1. Launch. Allow location. The map fills with places around you.
-2. Let the ATT prompt appear; answer it either way.
-3. Pull the list sheet up, scroll it, drag it back down.
-4. Tap a place → its page: rating, reviews, "how to find it inside".
-5. Write a review. Add a photo. Show the photo goes to review, not live.
-6. Open **Report a problem** on that listing — this is the 1.2 requirement.
-7. Search "Starbucks", then search "pizza", to show business search.
+Because this app has them, it also has to show:
 
-No account, no login, no paid content — so nothing to demonstrate there.
+| Must appear | Why Apple cares |
+|---|---|
+| The **location permission** prompt | They check the prompt is shown and the purpose string matches what the app does |
+| The **App Tracking Transparency** prompt | Required before any tracking; a missing prompt is a rejection on its own |
+| **Writing a review and adding a photo** | This is the user-generated content their 1.2 review is about |
+| The **Report control** on a place | 1.2 requires a way to report content, and they look for it |
 
----
+### Film build 28, not 27
 
-## Already done — no need to paste these
+Build **28 (v1.6.6)** is the one to record. Its TestFlight note says so.
 
-Items 2 to 7 have been written into **App Review Information → Notes**
-(3,521 characters), which is where Apple's message asked for them. The
-Resolution Center reply therefore only needs the screen recording plus a
-short covering line. The text is kept below for reference.
+Build 27 is still installable and looks identical, but it has a privacy bug
+that would make our own submission notes untrue — see *What changed and why*
+below. Filming 27 and submitting 28 would also mean the video does not match
+the binary, which is exactly the kind of mismatch that starts another round.
 
-## 2. Devices and operating systems tested
+### A two-minute run that covers everything
 
-> Bathroom Finder 1.6.4 (build 27) was tested on iPhone via TestFlight on the
-> current release of iOS, and in the iOS Simulator on the latest iPhone
-> runtime available on macOS 15 with Xcode 26. Every build additionally runs
-> an automated launch check that installs the app on a simulator, grants
-> location, launches it, verifies the process survives, and verifies the app
-> renders a non-blank screen before the build is accepted.
+Record with iOS Screen Recording (Control Centre). No narration needed.
 
-*(Fill in the exact iPhone model and iOS version you film on — Apple asks for
-specifics and it should match the recording.)*
+1. **Launch from the home screen.** Let the location prompt appear — tap Allow.
+   The map fills with the places around you.
+2. **Let the tracking prompt appear.** Answer it either way; both are valid.
+   Just don't skip past it before it shows.
+3. **Drag the list sheet up**, scroll it, drag it back down. This shows the
+   list and the map are one screen, which is the core interaction.
+4. **Tap a place.** Its page opens: rating, reviews, access, and "how to find
+   it inside".
+5. **Write a review.** Give it stars and a line of text. Submit it.
+6. **Add a photo.** Take or choose one. Show that it says it is going for
+   review rather than appearing instantly — that is the 1.2 filtering
+   requirement being visible.
+7. **Open "Report a problem"** on that same place and show the reasons list.
+   You do not have to submit it.
+8. **Search "Starbucks"**, then **"pizza"** — this shows business search, not
+   just cities.
 
----
+Stop the recording. Two minutes is plenty; shorter is fine if all eight appear.
 
-## 3. What the app does, and for whom
+### Then send it to me
 
-> Bathroom Finder is a map of public bathrooms and of the bathrooms inside
-> ordinary businesses — cafés, shops, hotels, stations, libraries.
->
-> The problem it solves: a map can tell you a bathroom exists, but not
-> whether you can actually get into it. This app records what the last
-> person found — is it unlocked, is there a fee, is there a keypad code, is
-> it customers-only, how clean was it, and where in the building it actually
-> is ("past the fish counter, unmarked green door on the left").
->
-> Target audience: general audience, adults and families. It is particularly
-> useful to people who need to plan around bathroom access — parents with
-> young children, older people, people with IBD, Crohn's or a colostomy, and
-> anyone in an unfamiliar city.
->
-> There is no account and no sign-in. The app is fully usable the moment it
-> opens.
+Save the file anywhere and tell me the path. I will attach it to **App Review
+Information** on version 1.6.6 with:
+
+```bash
+node tools/attach-review-video.js "path/to/your-recording.mp4"
+```
+
+That puts the recording on the submission itself, so it is in front of the
+reviewer when they open it rather than sitting in a message thread. I will also
+draft the Resolution Center reply to go with it.
 
 ---
 
-## 4. Setting up and reaching the main features
+## Already done — you do not need to write any of this
 
-> No setup, no credentials, no sample files are required. There is no login
-> of any kind.
->
-> - **On launch** the app asks for location and centres the map on you. If
->   location is declined it still works — search any city by name.
-> - **The list** of places is the sheet at the bottom. Drag it up by its
->   header for the full list, drag it down for the map.
-> - **A place page** opens by tapping any row in the list or any map pin.
->   Ratings, reviews, photos, opening hours and directions are all there.
-> - **Contributing** — "Write a review" and "Add photo" are on that page.
->   "Add a bathroom here" is the + button on the map.
-> - **Reporting** — every listing, review and photo has a Report control on
->   the place page. Reported photos are hidden immediately, before any
->   moderator sees them.
-> - **Moderation** — photos pass an on-device content check and are then held
->   in a human review queue. Nothing a user uploads is visible to anyone else
->   until a moderator approves it. Moderators can block a contributor, which
->   withdraws their content and prevents further posts.
+Items 2 to 7 of Apple's request are in **App Review Information → Notes**
+(3,521 characters), which is where their message asked for them. Verified by
+reading them back off the API, not by assuming the write landed.
 
----
+They cover: devices and OS tested; what the app does and for whom; how to reach
+every feature with no account or demo credentials; the external services used;
+regional differences (none); and regulated-industry / third-party material
+(OpenStreetMap and CARTO, both attributed).
 
-## 5. External services used
+## What the audit found and fixed
 
-> - **OpenStreetMap / Overpass API** (overpass-api.de) — the source of the
->   places and bathrooms shown on the map. Data © OpenStreetMap contributors,
->   licensed ODbL, attributed in the app.
-> - **Nominatim** (nominatim.openstreetmap.org) — search, for turning a typed
->   place or business name into a location.
-> - **CARTO basemaps** (basemaps.cartocdn.com) — the map tiles, attributed in
->   the app.
-> - **Our own backend** (bathroom-finder.onrender.com) — stores reviews,
->   photos, moderation state and sponsored listings. Hosted on Render, with
->   the database on Turso.
-> - **Google AdMob** — serves the banner ad. On iOS the App Tracking
->   Transparency prompt is shown first; declining gives non-personalised ads.
-> - **Leaflet** (unpkg.com) and **Google Fonts** — map rendering library and
->   typefaces.
->
-> No authentication service, no payment processor, and no AI service is used.
-> There are no in-app purchases and no subscriptions.
+Reading the submission back rather than trusting memory turned up three things:
 
----
+- **The version record said 1.6.4 and had no subtitle.** Renamed to 1.6.6 so
+  the corrected build can attach, and the subtitle now reads *Find a bathroom,
+  fast*. Thirty characters under the app name is the only other place the
+  listing gets to say what it is.
+- **Only 6.5-inch screenshots were on file.** Apple was upscaling those for
+  every modern iPhone. The 6.7-inch set (1290×2796) is now uploaded too.
+- **Build 27 contradicted our own privacy declaration.** The advertising
+  enquiry form posted the map centre at full precision — a metre-accurate
+  position — next to the sender's email address. Our privacy labels say precise
+  location is never collected and the review notes say the precise position is
+  never sent. Both were false for build 27. Fixed, and build 28 is the honest
+  one.
 
-## 6. Regional differences
+Also checked, and passing, against the live app:
 
-> The app functions identically in every region. There is no
-> region-restricted content, no regional pricing, and no feature that is
-> enabled or disabled by territory. The only difference a user sees is the
-> map data itself, which comes from OpenStreetMap and is denser in some
-> places than others.
+- the report control opens and offers reasons; review and photo contributions
+  are reachable (`node tools/ugc-controls-check.js`)
+- no subscription or rental surface a reviewer could see but not buy, which
+  would be a 3.1.1 rejection by itself
+- the place page opens without throwing (`node tools/ui-smoke.js`)
+- 62 logic, 45 backend and 5 durability checks green
 
----
+## What happens after the video
 
-## 7. Regulated industry / third-party material
+1. I attach the recording and confirm it reads back as delivered.
+2. I draft the Resolution Center reply for you to send.
+3. Submit for review — the version is in *Prepare for Submission*, so a reply
+   alone will not restart it; it has to be submitted again.
 
-> The app does not operate in a regulated industry.
->
-> Map data is OpenStreetMap, used under the Open Database Licence and
-> attributed in the app and on the listing. Map tiles are CARTO's free
-> basemap service, attributed as their terms require. No other third-party
-> protected material is included.
-
----
-
-## Note on the Overpass mirror — decided and done
-
-The app used to fall back to a public Overpass mirror at maps.mail.ru when
-the main instance rate-limited. Measured with the same query against both:
-overpass-api.de answered in 4.8s, the mirror in 40s — against the app's own
-20-second abort. It could never have returned in time, so it was dead code
-that would still have had to be disclosed.
-
-Removed in 1.6.4. The service list in item 5 above is now complete and
-accurate for the submitted binary.
+Review is usually 24–48 hours from that point.
