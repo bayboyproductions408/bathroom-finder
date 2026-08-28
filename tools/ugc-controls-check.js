@@ -166,6 +166,32 @@ async function main(){
     check('the report sheet offers reasons', !!(report && report.reasons),
           report && report.chars ? report.chars + ' chars shown' : '');
 
+    /* 3.1.1: a visible subscription or rental flow that takes no money through
+       In-App Purchase is a rejection on its own. Both features are behind
+       FEATURES flags that are off, and every entry point is guarded — but the
+       guard is the claim, and this is the check. Read what the profile screen
+       actually renders. */
+    const commerce = await evaluate(`(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const tab = document.querySelector('.tab[data-go="profile"]');
+      if (!tab) return {ok:false, why:'no profile tab'};
+      tab.click();
+      await wait(900);
+      const p = document.getElementById('panel-profile');
+      const text = p ? p.innerText : '';
+      const offenders = ['Plus', 'Subscribe', 'Subscription', 'Rent out', 'Host console', 'Bookings']
+        .filter(w => new RegExp('\\\\b' + w, 'i').test(text));
+      const priced = /(\\$|£|€)\\s?\\d/.test(text);
+      return {ok: offenders.length === 0 && !priced, offenders, priced,
+              flags: JSON.stringify(window.BF_FEATURES || null)};
+    })()`);
+    check('no dead subscription or rental surface on profile',
+          !!(commerce && commerce.ok),
+          commerce ? JSON.stringify(commerce) : 'no result');
+    check('both paid features are flagged off',
+          !!(commerce && /"rentals":false/.test(commerce.flags) && /"plus":false/.test(commerce.flags)),
+          commerce ? commerce.flags : '');
+
     /* 1.2 (iv) a published contact address, reachable from inside the app */
     const support = await evaluate(`(async () => {
       const wait = ms => new Promise(r => setTimeout(r, ms));
