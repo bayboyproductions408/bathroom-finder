@@ -288,7 +288,11 @@ jobs:
           APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
           APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
           BUILD_NUMBER: ${{ github.run_number }}
-          NOTES: ${{ inputs.notes }}
+          # inputs.notes only exists on a manual run. Tag-triggered builds left
+          # it empty, set-testflight-notes.js exited early, and the build landed
+          # with no note at all — which is the same failure this step was added
+          # to fix, just through the other door. Fall back to the tag.
+          NOTES: ${{ inputs.notes || format('Build from {0}', github.ref_name) }}
         run: node tools/set-testflight-notes.js
 
       - name: Clean up the key
