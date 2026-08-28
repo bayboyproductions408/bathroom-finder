@@ -19,14 +19,18 @@ Apple's requirements, as they stated them:
 - starts with **launching the app**
 - shows the **typical user flow through the core features**
 
-Because this app has them, it also has to show:
+Apple listed four categories to include *if the app has them*. Two apply here
+and two do not:
 
-| Must appear | Why Apple cares |
+| Their category | This app |
 |---|---|
-| The **location permission** prompt | They check it is shown and that the purpose string matches what the app does |
-| The **App Tracking Transparency** prompt | Required before any tracking; missing it is a rejection on its own |
-| **Writing a review and adding a photo** | This is the user-generated content their 1.2 review is about |
-| The **Report control** on a place | 1.2 requires a way to report content, and they look for it |
+| Account registration, login, deletion | **None.** No account, no sign-in — say so in the reply rather than leaving them to wonder why it is missing |
+| Paid content, purchases, subscriptions | **None.** No in-app purchases; the subscription and rental features are flagged off and unreachable |
+| User-generated content, **including reporting and blocking** | **Yes** — writing a review, adding a photo, and the Report control |
+| Prompts for sensitive data or capabilities | **Yes** — location, camera or photo library, and App Tracking Transparency. All three must appear |
+
+The camera or photo-library prompt is easy to forget because it only fires when
+you actually add a photo. Apple lists it explicitly, so do not skip step 6.
 
 ### Film build 29
 
@@ -83,19 +87,34 @@ Paste this into the App Review message thread once the video is attached:
 
 > Thank you for the detailed request.
 >
-> A screen recording is attached to App Review Information on version 1.6.7
-> (build 29). It was taken on a physical iPhone running current iOS and shows,
-> in order: launching the app, the location permission prompt, the App Tracking
-> Transparency prompt, browsing the map and the list, opening a place, writing
-> a review, adding a photo and the notice that it is held for review, the
-> Report a problem control, and searching for a business by name.
+> **1. Screen recording.** Attached to App Review Information on version 1.6.7
+> (build 29), captured on a physical iPhone running the current iOS. It begins
+> with launching the app and shows the typical flow: the location permission
+> prompt, the App Tracking Transparency prompt, the map and the list of places,
+> opening a place, writing a review, adding a photo (including the photo
+> permission prompt and the notice that the photo is held for review before
+> anyone else can see it), the "Report a problem" control and its reasons, and
+> searching for a business by name.
 >
-> The remaining items you listed are in the Notes field of App Review
-> Information: the devices and operating systems tested, what the app does and
-> for whom, how to reach every feature (there is no account, no sign-in and no
-> demo credentials — the app is fully usable on launch), the external services
-> it uses, regional differences (there are none), and the third-party content
-> it relies on (OpenStreetMap and CARTO, both attributed in the app).
+> On the categories you listed: the app has **no account registration, login or
+> deletion** — there is no sign-in of any kind and it is fully usable the moment
+> it opens — and **no paid content, purchases or subscriptions**, so neither
+> flow appears in the recording. User-generated content and the sensitive-data
+> prompts are both shown.
+>
+> On blocking: reviews and photos are one-way contributions to a place, so there
+> is no user-to-user surface. Objectionable contributors are blocked by a
+> moderator, which withdraws their content and prevents further posts; every
+> photo is also held in a human review queue before it is visible to anyone.
+> Reporting is available in-app on any listing, review or photo.
+>
+> **2 to 7.** These are in the Notes field of App Review Information: the
+> devices and operating systems tested, what the app does and for whom, how to
+> reach every feature (no credentials or sample files are needed), the external
+> services it uses, regional differences (there are none — it behaves
+> identically everywhere, only the OpenStreetMap coverage varies), and the
+> third-party material it relies on (OpenStreetMap under ODbL and CARTO
+> basemaps, both attributed in the app and on the listing).
 >
 > Please let me know if anything else would help.
 
@@ -147,8 +166,22 @@ Also checked, and passing, against the deployed app:
 ## What happens after the video
 
 1. I attach the recording and confirm it reads back as delivered.
-2. You send the Resolution Center reply above.
-3. Submit for review. The version sits in *Prepare for Submission*, so a reply
-   alone will not restart it — it has to be submitted again.
+2. In App Store Connect → **Distribution → App Review**, open the submission
+   marked *Unresolved Issues* and paste the reply above into **Reply to App
+   Review**.
+3. On the same page, click **Resubmit to App Review**. The rejected item there
+   already reads *iOS App 1.6.7 — 1.6.7 (29)*, so it will carry build 29; a
+   reply on its own does not restart the review.
 
 Review is usually 24–48 hours from that point.
+
+## The one residual risk, stated plainly
+
+Apple's list says "user-generated content, including content reporting **and
+blocking** mechanisms". This app has reporting in-app; blocking is done by a
+moderator rather than by users, because reviews are one-way contributions to a
+place and there is no user-to-user surface to block from. That is a normal
+shape for a review app and it is what the submission notes already describe,
+and Apple did not raise 1.2 in this rejection — but it is the part of the reply
+most open to a follow-up question, which is why the draft above addresses it
+head-on instead of waiting to be asked.
