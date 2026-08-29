@@ -166,6 +166,61 @@ async function main(){
     check('the report sheet offers reasons', !!(report && report.reasons),
           report && report.chars ? report.chars + ' chars shown' : '');
 
+    /* 1.2 (iii) blocking. Apple's rejection letter names "content reporting and
+       blocking mechanisms" among the things the demo video must show, so this
+       has to be findable from a review, not buried in a settings screen. Drive
+       it the way a person would: open the menu, block, confirm the review is
+       gone, then confirm it can be undone.
+
+       Most OSM places have no reviews yet, so against production there is
+       usually nothing to block. Skip loudly rather than failing: a red cross
+       that means "no data here" trains you to ignore red crosses. To exercise
+       it for real, seed a review on a local server and point this at that. */
+    const hasReview = await evaluate(`document.querySelectorAll('#detail-body .review').length`);
+    if (!hasReview){
+      console.log('  skip  blocking — this place has no reviews to block');
+      console.log('        (seed one against a local server to exercise it: see scratchpad/verify-blocking.js)');
+    } else {
+    const block = await evaluate(`(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const menu = document.querySelector('#detail-body .rmenu[data-rmenu]');
+      if (!menu) return {ok:false, why:'no per-review menu control'};
+      const before = document.querySelectorAll('#detail-body .review').length;
+      menu.click();
+      await wait(800);
+      const modal = document.getElementById('modal');
+      const text = modal ? modal.innerText : '';
+      const offersReport = /report this review/i.test(text);
+      const offersBlock  = /\\bblock\\b/i.test(text);
+      const blockBtn = modal && modal.querySelector('[data-rm="block"]');
+      if (!blockBtn) return {ok:false, why:'no block button in the sheet', offersReport, offersBlock, text:text.slice(0,120)};
+      blockBtn.click();
+      await wait(1200);
+      const after = document.querySelectorAll('#detail-body .review').length;
+      return {ok: offersReport && offersBlock && after < before,
+              offersReport, offersBlock, before, after};
+    })()`);
+    check('a review offers report and block', !!(block && block.offersReport && block.offersBlock),
+          block ? JSON.stringify(block) : 'no result');
+    check("blocking actually hides that person's review",
+          !!(block && block.ok), block ? JSON.stringify(block) : '');
+
+    const undo = await evaluate(`(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      document.querySelector('.tab[data-go="profile"]').click();
+      await wait(900);
+      const p = document.getElementById('panel-profile');
+      const btn = p && p.querySelector('[data-unblock]');
+      if (!btn) return {ok:false, why:'no unblock control in Profile'};
+      btn.click();
+      await wait(700);
+      const left = document.querySelectorAll('#panel-profile [data-unblock]').length;
+      return {ok: left === 0, left};
+    })()`);
+    check('blocking can be undone from Profile', !!(undo && undo.ok),
+          undo ? JSON.stringify(undo) : '');
+    }
+
     /* 3.1.1: a visible subscription or rental flow that takes no money through
        In-App Purchase is a rejection on its own. Both features are behind
        FEATURES flags that are off, and every entry point is guarded — but the
