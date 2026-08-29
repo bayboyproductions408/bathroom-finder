@@ -91,7 +91,7 @@ App Store Connect record: **Bathroom Finder Nearby**, Apple ID `6804091512`.
 | `APPSTORE_KEY_ID` | In the repo's Actions secrets |
 | `APPSTORE_ISSUER_ID` | In the repo's Actions secrets, with the correct `92a3` |
 
-**Privacy labels as published** (10 data types). *Data Used to Track You:*
+**Privacy labels as published** (10 data types, updated 2026-08-27). *Data Used to Track You:*
 Identifiers (Device ID) and Usage Data (Advertising Data) — both because of
 AdMob. *Data Linked to You:* Contact Info — Email Address and Phone Number, from
 the advertising enquiry form, for App Functionality and the developer's own
@@ -118,11 +118,11 @@ is that we contact the business about a paid listing.
 
 ### What iOS is waiting on
 
-Version **1.6.7**, build **29**, is attached, and every field App Store Connect
-gates on has been read back off the API and passes: build VALID and not expired,
-export compliance answered, review contact and notes present, no demo account
-needed, description, keywords, support and marketing URLs, and screenshots at
-both 6.5 and 6.7 inches.
+Version **1.6.8**, build **30**, is attached, and every field App Store Connect
+gates on reads back green off the API: build VALID and not expired, export
+compliance answered, review contact and 3,773 characters of notes, no demo
+account needed, description, keywords, support and marketing URLs, and
+screenshots at both 6.5 and 6.7 inches.
 
 Apple's reply was **Guideline 2.1, Information Needed** — not a defect. Six of
 the seven things they asked for are in *App Review Information → Notes*.
@@ -131,25 +131,31 @@ The seventh cannot be done from here:
 
 > **A screen recording, on a physical device, running current iOS.** It has to
 > start with the app launching and walk the core features, and because this app
-> has them it must also show the location prompt, the App Tracking Transparency
-> prompt, writing a review, adding a photo, and the Report control.
+> has them it must also show the location, photo and App Tracking Transparency
+> prompts, writing a review, adding a photo, and **reporting and blocking**.
 
-Install build 29 from TestFlight and film about two minutes. Then
+Install build 30 from TestFlight and film about two minutes. Then
 `node tools/attach-review-video.js <file>` puts it on the submission itself,
-where the reviewer sees it rather than in a message thread. The shot list and a
-ready-to-send Resolution Center reply are both in APP-REVIEW-REPLY.md.
+where the reviewer sees it rather than in a message thread. The nine-shot list
+and a ready-to-send Resolution Center reply are both in APP-REVIEW-REPLY.md.
 
-**What the audit caught.** Reading the submission back rather than trusting
-memory turned up five problems. The version record still said 1.6.4 and had no
-subtitle. Only 6.5-inch screenshots existed, so Apple was upscaling them for
-every modern iPhone. And the app was telling Apple two untrue things: the
-advertising enquiry posted a metre-accurate position while the privacy label
-said precise location is never collected, and the privacy page claimed we could
-not contact you when that same form collects an email address. The label now
-declares Contact Info: Email Address and Phone Number — Apple's optional
-disclosure rule excludes anything used for the developer's own marketing, which
-this is — and build 29 is the first binary where the code, the privacy page and
-the App Store label all say the same thing.
+**What the audit caught.** Reading the submission back, and then reading what
+the app actually renders, turned up seven problems. The version record still
+said 1.6.4 with no subtitle, and only 6.5-inch screenshots existed. The privacy
+label declared Contact Info: Name only, while the advertising enquiry form
+collects an email or phone — Apple's optional-disclosure exemption does not
+cover it, because it excludes anything used for the developer's own marketing.
+That same form posted a metre-accurate position while the label said precise
+location is never collected, and privacy.html claimed we could not contact you.
+There was **no way to block anyone**, which Apple's letter explicitly asks the
+video to show. And the app told people their reviews were "stored on this
+device only — there is no server yet" and that "Nothing is uploaded", both of
+which stopped being true when the Turso backend went live; somebody could have
+written something personal believing it was private.
+
+Build 30 is the first binary where the code, the in-app privacy page and the
+App Store privacy label all say the same thing, and the first with a blocking
+mechanism to film.
 
 ---
 
