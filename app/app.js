@@ -35,6 +35,7 @@ const I = {
   camera:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.6-2.4h6.8L17 8h3v12H4V8Z"/><circle cx="12" cy="13.4" r="3.6"/></svg>`,
   pen:`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L20 8l-4-4L4 16v4Z"/><path d="m14.5 5.5 4 4"/></svg>`,
   flag:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4M5 4h12l-2.2 3.5L17 11H5"/></svg>`,
+  more:`<svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5.5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="18.5" r="1.7"/></svg>`,
   clock:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>`,
   coin:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M14.4 9.2A2.6 2.6 0 0 0 12 8c-1.4 0-2.5.9-2.5 2s1.1 2 2.5 2 2.5.9 2.5 2-1.1 2-2.5 2a2.6 2.6 0 0 1-2.4-1.2M12 6.4v11.2"/></svg>`,
   wheelchair:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="3.8" r="1.8"/><path d="M11 7v6h5l2.5 6"/><path d="M15.6 14.4A5.6 5.6 0 1 1 8 10.2"/></svg>`,
@@ -109,6 +110,7 @@ function starsHTML(v, size){
 
 /* ---------- store ---------- */
 const DEFAULT_STORE = {community:{}, saved:[], local:[], hosts:[], requests:[], bookings:[], photos:{}, mine:[],
+                       blocked:[],
                        profile:{name:'You', handle:'@you', payMethod:'sim_visa'}, seeded:false, theme:null};
 let store = structuredClone(DEFAULT_STORE);
 try { const raw = localStorage.getItem('bf.v2'); if (raw) store = Object.assign(structuredClone(DEFAULT_STORE), JSON.parse(raw)); } catch(e){}
@@ -404,12 +406,36 @@ function fromOSM(e){
    seen yet, because it may still be sitting in the outbox.              */
 const placePayload = f => ({id:f.id, source:f.source || 'osm', cat:f.cat, lat:f.lat, lng:f.lng,
                             name:f.name, sub:f.sub, tags:f.tags || {}});
+/* ---------- blocking ----------
+   Guideline 1.2 asks for a way to block an abusive contributor, and it is the
+   right feature regardless: someone who leaves a foul review should be one tap
+   away from never appearing again.
+
+   Blocking is per-device and reversible. It filters at render rather than at
+   merge, so unblocking brings the content straight back without refetching,
+   and a blocked person's rows are never deleted — they are simply not shown to
+   the person who blocked them. Reporting is separate and goes to a moderator;
+   blocking is the reader deciding for themselves and needs nobody's approval
+   to take effect. */
+const isBlocked = author => !!author && (store.blocked || []).includes(author);
+function blockAuthor(author, name){
+  if (!author || isBlocked(author)) return false;
+  (store.blocked = store.blocked || []).push(author);
+  save();
+  toast(`Blocked ${name ? esc(name) : 'that person'} — you will not see their contributions`, I.check);
+  return true;
+}
+function unblockAuthor(author){
+  store.blocked = (store.blocked || []).filter(a => a !== author);
+  save();
+}
+
 function mergeCommunity(id, bundle){
   if (!bundle) return;
   const c = community(id);
   c.reviews = (bundle.reviews || []).map(r => ({
-    user:r.user, localId:r.localId, stars:r.stars, text:r.text, tags:r.tags || [], sub:r.sub,
-    at:r.at, photos:[], remote:true
+    id:r.id, user:r.user, author:r.author, localId:r.localId, stars:r.stars, text:r.text,
+    tags:r.tags || [], sub:r.sub, at:r.at, photos:[], remote:true
   }));
   c.confirms = (bundle.confirms || []).slice().reverse();
   c.reports  = bundle.reports || [];
@@ -422,7 +448,7 @@ function mergeCommunity(id, bundle){
   for (const p of bundle.photos || []){
     if (!store.photos[p.id])
       store.photos[p.id] = {id:p.id, remote:true, data:Sync.photoURL(p.id), state:p.state,
-                            by:p.by, at:Date.now(), featureId:id, reports:[], reasons:[]};
+                            by:p.by, author:p.author, at:Date.now(), featureId:id, reports:[], reasons:[]};
     else store.photos[p.id].state = p.state;
   }
   const shown = (bundle.photos || []).map(p => p.id);
@@ -941,6 +967,11 @@ function renderDetail(id, keepScroll){
   const body = el('detail-body');
   const prev = keepScroll ? body.scrollTop : 0;
   const c = community(f.id);
+  /* Filter at render, not at merge: unblocking has to bring the reviews back
+     without another round trip, and the indices below have to line up with
+     what is actually on screen. */
+  const shownReviews = c.reviews.filter(r => !isBlocked(r.author));
+  const blockedHere = c.reviews.length - shownReviews.length;
   const acc = accessOf(f), rating = ratingOf(f);
   const saved = store.saved.includes(f.id);
   const origin = state.me || map.getCenter();
@@ -1049,24 +1080,27 @@ function renderDetail(id, keepScroll){
   <div class="section" style="padding-bottom:26px">
     <h2>Reviews <span class="more" data-act="review">Write a review</span></h2>
     <div class="card" style="padding:4px 14px 12px">
-      ${c.reviews.length ? c.reviews.map((r,i)=>`
+      ${shownReviews.length ? shownReviews.map((r,i)=>`
         <article class="review">
           <div class="rhead">
             <div class="avatar" style="background:${avColor(r.user)}">${esc(initials(r.user))}</div>
             <div style="flex:1"><div class="rname">${esc(r.user)}</div><div class="rmeta">${timeAgo(r.at)}</div></div>
             ${starsHTML(r.stars,14)}
+            ${r.author ? `<button class="rmenu" data-rmenu="${i}" aria-label="Report or block ${esc(r.user)}">${I.more}</button>` : ''}
           </div>
           ${r.text ? `<p class="rbody">${esc(r.text)}</p>` : ''}
           ${(r.tags||[]).length ? `<div class="rtags">${r.tags.map(t=>`<span class="rtag">${esc(t)}</span>`).join('')}</div>` : ''}
           ${visiblePhotos(r.photos, r.user).length ? `<div class="rphotos">${visiblePhotos(r.photos, r.user).map((ph,j)=>`<button data-rphoto="${i}|${j}" class="${ph.state==='pending'?'photo-pending':''}"><img src="${ph.src}" alt=""></button>`).join('')}</div>` : ''}
         </article>`).join('')
-        : `<div class="empty" style="padding:26px 10px"><h3>No reviews yet</h3>
-           <p>Tell the next person what it is actually like in there.</p>
+        : `<div class="empty" style="padding:26px 10px"><h3>${blockedHere ? 'Nothing left to show' : 'No reviews yet'}</h3>
+           <p>${blockedHere ? 'The reviews here are from people you have blocked. You can unblock them in Profile.'
+                            : 'Tell the next person what it is actually like in there.'}</p>
            <button class="minibtn" data-act="review">${I.pen} Write the first review</button></div>`}
     </div>
     <p style="font-size:11.5px;color:var(--ink-3);line-height:1.55;margin:14px 2px 0">
-      Place data from OpenStreetMap contributors. Reviews and photos you add are stored on this device only —
-      there is no server yet, so nobody else can see them.
+      Place data from OpenStreetMap contributors. Reviews and photos you add are
+      published for everyone — photos are checked before anyone else sees them.
+      ${blockedHere ? `<br>${blockedHere} review${blockedHere > 1 ? 's are' : ' is'} hidden because you blocked whoever wrote ${blockedHere > 1 ? 'them' : 'it'}.` : ''}
     </p>
   </div>`;
 
@@ -1115,8 +1149,49 @@ function renderDetail(id, keepScroll){
   }));
   body.querySelectorAll('[data-rphoto]').forEach(b => b.addEventListener('click', () => {
     const [i,j] = b.dataset.rphoto.split('|').map(Number);
-    const ph = visiblePhotos(c.reviews[i].photos, c.reviews[i].user)[j];
+    /* shownReviews, not c.reviews — the markup was built from the filtered
+       list, so indexing the unfiltered one opens somebody else's photo the
+       moment anybody is blocked. */
+    const r = shownReviews[i];
+    if (!r) return;
+    const ph = visiblePhotos(r.photos, r.user)[j];
     if (ph) openLightbox(ph.src, ph.who, f.name, ph.id, ph.state);
+  }));
+  body.querySelectorAll('[data-rmenu]').forEach(b => b.addEventListener('click', () => {
+    const r = shownReviews[Number(b.dataset.rmenu)];
+    if (r) openReviewMenu(f, r);
+  }));
+}
+
+/* Report or block the person who wrote a review. Two different things, and
+   the sheet says so: reporting asks a moderator to look, blocking is the
+   reader's own decision and takes effect immediately. */
+function openReviewMenu(f, r){
+  openModal(`
+    <h2>This review</h2>
+    <p class="lede">by ${esc(r.user)}</p>
+    <div class="toggle-list">
+      <button class="problem" data-rm="report">
+        <span><b>Report this review</b><span>A moderator will look at it. Use this for anything offensive, false or abusive.</span></span>
+        <span class="chev">${I.back}</span></button>
+      <button class="problem" data-rm="block">
+        <span><b>Block ${esc(r.user)}</b><span>Hides everything they have written or photographed, on this device. You can undo it in Profile.</span></span>
+        <span class="chev">${I.back}</span></button>
+    </div>`);
+  el('modal').querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => {
+    const what = b.dataset.rm;
+    closeModal();
+    if (what === 'block'){
+      if (blockAuthor(r.author, r.user)) renderDetail(f.id, true);
+      /* A block is also a signal worth sending, so a moderator can see a
+         contributor several people have blocked. */
+      Sync.report({place:placePayload(f), targetType:'review', targetId:r.id, kind:'blocked'})
+          .then(afterPush).catch(() => {});
+      return;
+    }
+    Sync.report({place:placePayload(f), targetType:'review', targetId:r.id, kind:'offensive'})
+        .then(afterPush).catch(() => {});
+    toast('Reported — a moderator will look at it', I.check);
   }));
 }
 function openDetail(id){
@@ -1138,6 +1213,10 @@ function visiblePhotos(ids, fallbackWho){
     }
     const rec = photoRec(entry);
     if (!rec) continue;
+    /* Blocking someone hides their photos too, wherever they appear — the
+       place gallery and the lightbox go through here as well as the review
+       list, so one guard covers all of them. */
+    if (isBlocked(rec.author)) continue;
     const mine = rec.by === store.profile.name;
     if (rec.state === 'approved') out.push({src:rec.data, who:rec.by, state:'approved', id:rec.id});
     else if (rec.state === 'pending' && mine) out.push({src:rec.data, who:rec.by, state:'pending', id:rec.id});
@@ -1774,11 +1853,31 @@ function renderProfile(){
       </p>
     </div>
     <div class="section">
+      <h2>Blocked people</h2>
+      <div class="card" style="padding:4px 14px 12px">
+        ${(store.blocked || []).length ? `
+          <p style="margin:10px 2px 8px; font-size:12.5px; line-height:1.6; color:var(--ink-2)">
+            You will not see anything these people write or photograph. They are not told,
+            and it only applies on this device.</p>
+          ${store.blocked.map(a => `
+            <div class="row" style="align-items:center">
+              <span class="ico" style="background:var(--surface-2); color:var(--ink-2)">${I.more}</span>
+              <span style="flex:1"><h3>Blocked contributor</h3>
+                <span class="meta">Blocked on this device</span></span>
+              <button class="minibtn" data-unblock="${esc(a)}">Unblock</button>
+            </div>`).join('')}`
+        : `<p style="margin:12px 2px; font-size:12.5px; line-height:1.6; color:var(--ink-3)">
+             Nobody blocked. If a review is offensive, open the ⋮ beside it — you can report it
+             to a moderator, or block the person outright.</p>`}
+      </div>
+    </div>
+    <div class="section">
       <h2>Your data</h2>
       <div class="card">
         <p style="margin:0 0 12px; font-size:12.5px; line-height:1.6; color:var(--ink-2)">
-          Everything you add lives in this browser. Nothing is uploaded, and clearing your browser data erases it.
-          A shared, worldwide database is the next thing to build.</p>
+          Reviews, photos and corrections you add are uploaded and shared with everyone using
+          the app — photos only after a moderator approves them. Your saved list, blocks and
+          settings stay on this device, and clearing your browser data erases those.</p>
         <button class="btn secondary" id="p-export">Export my data as a file</button>
         <button class="btn secondary" id="p-reset" style="margin-top:8px; color:var(--locked)">Erase everything on this device</button>
       </div>
@@ -1827,6 +1926,14 @@ function renderProfile(){
       save(); closeModal(); renderProfile(); toast('Name updated', I.check);
     });
   });
+  el('profile-body').querySelectorAll('[data-unblock]').forEach(b => b.addEventListener('click', () => {
+    unblockAuthor(b.dataset.unblock);
+    renderProfile();
+    /* If the place they contributed to is open behind this, it should stop
+       hiding them straight away rather than on the next visit. */
+    if (state.sel) renderDetail(state.sel, true);
+    toast('Unblocked — their reviews are back', I.check);
+  }));
   el('p-export').addEventListener('click', () => {
     const blob = new Blob([JSON.stringify(store, null, 1)], {type:'application/json'});
     const a = document.createElement('a');

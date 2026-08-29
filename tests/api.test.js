@@ -398,3 +398,39 @@ test('a review without a localId still works (older clients)', async () => {
   assert.strictEqual(seen.body.community.reviews.length, 2,
     'null localId must not collide with another null');
 });
+
+/* ---- blocking ----
+   Guideline 1.2 wants a way to block an abusive contributor, and the client
+   can only do that if a review says, stably and opaquely, who wrote it. The
+   display name cannot carry that: it is free text and two people can pick the
+   same one. */
+test('a review carries a stable author key', async () => {
+  const place = {...PLACE, id:'osm:node/910', name:'Author Key'};
+  await call('POST', '/api/v1/review', {body:{place, stars:4, text:'first', localId:'lr_a1'}, token:alice.token});
+  const seen = await call('GET', '/api/v1/place', {query:'?id=' + encodeURIComponent(place.id)});
+  const r = seen.body.community.reviews[0];
+  assert.ok(r.author, 'every review needs an author key or nothing can be blocked');
+  assert.match(r.author, /^[0-9a-f]{16}$/, 'opaque, fixed length');
+});
+
+test('the author key is the same person across different places', async () => {
+  const p1 = {...PLACE, id:'osm:node/911', name:'Across One'};
+  const p2 = {...PLACE, id:'osm:node/912', name:'Across Two'};
+  await call('POST', '/api/v1/review', {body:{place:p1, stars:5, text:'here', localId:'lr_x1'}, token:alice.token});
+  await call('POST', '/api/v1/review', {body:{place:p2, stars:1, text:'and here', localId:'lr_x2'}, token:alice.token});
+  const a = await call('GET', '/api/v1/place', {query:'?id=' + encodeURIComponent(p1.id)});
+  const b = await call('GET', '/api/v1/place', {query:'?id=' + encodeURIComponent(p2.id)});
+  assert.strictEqual(a.body.community.reviews[0].author, b.body.community.reviews[0].author,
+    'blocking someone has to hide them everywhere, not just where you blocked them');
+});
+
+test('two people get different author keys, and neither is the user id', async () => {
+  const place = {...PLACE, id:'osm:node/913', name:'Two People'};
+  await call('POST', '/api/v1/review', {body:{place, stars:5, text:'alice', localId:'lr_p1'}, token:alice.token});
+  await call('POST', '/api/v1/review', {body:{place, stars:1, text:'bob', localId:'lr_p2'}, token:bob.token});
+  const seen = await call('GET', '/api/v1/place', {query:'?id=' + encodeURIComponent(place.id)});
+  const keys = seen.body.community.reviews.map(r => r.author);
+  assert.strictEqual(new Set(keys).size, 2, 'blocking one must not hide the other');
+  assert.ok(!keys.includes(alice.userId) && !keys.includes(bob.userId),
+    'the bundle is public, so it must not hand out the row key for an account');
+});

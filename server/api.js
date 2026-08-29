@@ -141,6 +141,15 @@ function open(opts){
 
 const uid = p => p + '_' + crypto.randomBytes(9).toString('hex');
 const hash = t => crypto.createHash('sha256').update(String(t)).digest('hex');
+/* A stable, opaque handle for "the person who wrote this", so a reader can
+   block them and have every one of their contributions disappear.
+
+   Not the user id. The id is the key to that account's rows, and the bundle
+   is public — anyone can read any place. This is a one-way hash with a fixed
+   prefix, so it is consistent across places and useless anywhere else. The
+   display name cannot do this job: names are free text, nothing checks them,
+   and two people called "Anonymous" are not the same person. */
+const authorKey = id => id ? hash('bf-author:' + id).slice(0, 16) : null;
 const now = () => Date.now();
 const json = v => JSON.stringify(v == null ? null : v);
 const parse = (v, d) => { try { return v == null ? d : JSON.parse(v); } catch(e){ return d; } };
@@ -345,14 +354,14 @@ function createAPI({file, adminToken, url, authToken}){
     const stats = await q.statsFor.get(id) || {n:0, avg:null};
     const corrections = {};
     for (const c of await q.corrFor.all(id)) if (!corrections[c.kind]) corrections[c.kind] = parse(c.value, null);
-    const photos = (await q.photosFor.all(id)).map(p => ({id:p.id, by:p.user_id, state:p.state}));
+    const photos = (await q.photosFor.all(id)).map(p => ({id:p.id, by:p.user_id, author:authorKey(p.user_id), state:p.state}));
     const mine = viewerId ? (await q.myPhotosFor.all(id, viewerId)).filter(p => p.state !== 'approved')
-                                .map(p => ({id:p.id, by:p.user_id, state:p.state})) : [];
+                                .map(p => ({id:p.id, by:p.user_id, author:authorKey(p.user_id), state:p.state})) : [];
     return {
       id,
       reviews: (await q.reviewsFor.all(id)).map(r => ({
         id:r.id, localId:r.local_id, mine: viewerId ? r.user_id === viewerId : false,
-        user:r.user_name, stars:r.stars, text:r.text,
+        user:r.user_name, author:authorKey(r.user_id), stars:r.stars, text:r.text,
         tags:parse(r.tags, []), sub:parse(r.sub, null), at:r.created,
         photos: [] })),
       stats: {count: stats.n || 0, rating: stats.avg ? Math.round(stats.avg*10)/10 : null},
