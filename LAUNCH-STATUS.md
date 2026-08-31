@@ -212,6 +212,46 @@ yet, and that needs two things only you can do:
    difference between *invited* and *opted in*, are in CLOSED-TEST-RECRUITING.md.
 
 
+## One thing worth deciding before launch: the cold start
+
+Measured against production, not guessed:
+
+| | |
+|---|---|
+| Backend already awake | **0.27s** |
+| Backend asleep (first request of the day) | **12.4s** |
+| Backend unreachable entirely | ~24s, recovering via OpenStreetMap |
+
+Render's free tier spins a service down after fifteen minutes idle. A returning
+user never notices, because up to 1,500 places are cached on the device for
+fourteen days and drawn before any network call. The person who notices is the
+one opening the app for the first time — and an App Store reviewer is, by
+definition, exactly that person. Twelve seconds of empty map is not broken, but
+it can read as broken.
+
+Three options, and this one is yours because two of them touch your money or
+your quota:
+
+1. **Accept it.** The app works, the status line says "Loading bathrooms
+   nearby…", and every subsequent open is instant. Costs nothing.
+2. **Keep the service awake** with a scheduled ping. Free in GitHub Actions on
+   a public repo, but Render's free plan allows **750 instance-hours a month**
+   and staying awake all month uses about **744**. That is 99% of the
+   allowance, and any other free service on the account would push it over —
+   at which point things get suspended, which is far worse than a slow first
+   load. A narrower window (say 14 hours a day, ~434 hours) is the safer shape
+   if you want this.
+3. **Pay Render \$7/month** for an instance that never sleeps. This is the
+   real fix. I have not enabled it — nothing gets billed to you without you
+   saying so.
+
+What I did **not** do: I wrote a change to race our backend against
+OpenStreetMap after a short grace period, then measured Overpass at seven to
+ten seconds — against a twelve second cold start. The race would have gained
+almost nothing while sending a second request to a volunteer service that
+already returns 429 under load. Reverted. `node tools/verify-map-fallback.js`
+drives both paths if you want to re-measure.
+
 ## Revenue, honestly
 
 The arithmetic is in `MONETIZATION.md` and has not changed: banner ads on an app this
