@@ -212,6 +212,41 @@ yet, and that needs two things only you can do:
    difference between *invited* and *opted in*, are in CLOSED-TEST-RECRUITING.md.
 
 
+## Two App Store Connect keys were revoked (found 1 September)
+
+Checked because five days had passed, not because anything complained.
+
+| Key | Status on 1 Sept |
+|---|---|
+| `399645T965` — recorded as the CI key | **401, revoked** |
+| `AGJ7NZ5M93` — App Manager, used for metadata writes | **401, revoked** |
+| `QFU8S63X4U` | authenticates, but **read-only** (403 on any write) |
+
+Signing material is untouched and was checked separately: the iOS Distribution
+and Apple Distribution certificates are valid to August 2027, and the
+*Bathroom Finder App Store* provisioning profile is ACTIVE to 2027-08-21. Only
+the API keys went.
+
+**What this does not break.** Build 30 is already uploaded, attached and valid,
+so the current submission needs no key at all. The recording is attached
+through the App Store Connect UI, and the reply and resubmission happen there
+too.
+
+**What it does break.** The next iOS build cannot upload, because the workflow
+authenticates with the revoked key. That would previously have shown up as an
+authentication failure from `xcodebuild` at the end of a full macOS build —
+billed at ten times a Linux minute, and worded like a signing problem, which is
+a much longer hunt. `tools/check-asc-key.js` now runs as the first step of the
+iOS workflow and fails in about five seconds with the actual reason. Verified
+against all three keys: the revoked ones produce the error, the live one passes.
+
+**To fix it** — yours, because it is a credential: create a key with the **App
+Manager** role at App Store Connect → Users and Access → Integrations, then set
+`APPSTORE_KEY_ID` and `APPSTORE_PRIVATE_KEY` in the repository secrets. Keep the
+`.p8` beside the others in `dev-tools/ios-signing/` so local tooling works too.
+That also restores `tools/attach-review-video.js`, which currently detects the
+403 and points at the UI instead.
+
 ## One thing worth deciding before launch: the cold start
 
 Measured against production, not guessed:

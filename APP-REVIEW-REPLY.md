@@ -70,17 +70,21 @@ just as well.
 
 Stop the recording. Two minutes is plenty.
 
-### Then send it to me
+### Then attach it
 
-Save the file anywhere and tell me the path:
+Attach it yourself, in App Store Connect:
 
-```bash
-node tools/attach-review-video.js "path/to/your-recording.mp4"
-```
+> **Distribution → App Review Information → Attachment**, and upload the file.
 
-That attaches it to **App Review Information** on version 1.6.8, so it is in
-front of the reviewer when they open the submission rather than sitting in a
-message thread. I will confirm it reads back as delivered.
+That is the slot that travels with the submission, so the recording is in front
+of the reviewer when they open it rather than sitting in a message thread.
+
+There is a tool that does the same thing over the API,
+`node tools/attach-review-video.js <file>`, but as of 1 September it cannot:
+**two of the three App Store Connect API keys on this account were revoked**,
+and the one still alive is read-only. The tool now detects that and tells you
+to use the screen above. If you make a new App Manager key it will work again;
+either route puts the file in the same place.
 
 ### The Resolution Center reply, ready to send
 
@@ -168,7 +172,7 @@ Also checked, and passing:
 
 ## What happens after the video
 
-1. I attach the recording and confirm it reads back as delivered.
+1. Attach the recording under **App Review Information → Attachment**.
 2. In App Store Connect → **Distribution → App Review**, open the submission
    marked *Unresolved Issues* and paste the reply above into **Reply to App
    Review**.

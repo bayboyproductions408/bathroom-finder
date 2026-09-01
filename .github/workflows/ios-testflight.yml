@@ -40,6 +40,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check the App Store Connect key still works
+        # The key is not used until the very last step, so a revoked one costs
+        # a full macOS build — billed at ten times a Linux minute — before
+        # failing with an authentication error from xcodebuild that reads like
+        # a signing problem. Two of this team's three keys were revoked between
+        # 27 August and 1 September, including the one recorded as CI's, and
+        # nothing would have said so until the next release attempt died eight
+        # minutes in. Five seconds here buys that back.
+        env:
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+        run: node tools/check-asc-key.js
+
       - name: Use the newest Xcode on the image
         # Apple rejects uploads built against an old SDK: "This app was built
         # with the iOS 17.5 SDK. All iOS and iPadOS apps must be built with the

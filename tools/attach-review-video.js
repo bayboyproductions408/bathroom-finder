@@ -140,6 +140,20 @@ const SOFT_LIMIT = 50 * 1024 * 1024;
   }
   console.log('\nattached to App Review Information.');
 })().catch(e => {
+  const status = String(e.message || '').match(/^(\d{3})/);
+  if (status && status[1] === '401'){
+    console.error('\nThe API key was rejected (401) — it has been revoked, or the key id and');
+    console.error('issuer id do not belong together.');
+  } else if (status && status[1] === '403'){
+    console.error('\nThe key authenticates but is not allowed to write (403). Attaching a review');
+    console.error('attachment needs the App Manager role; a Developer-role key can only read.');
+  }
+  if (status && (status[1] === '401' || status[1] === '403')){
+    console.error('\nYou do not need this tool to get the video to Apple. In App Store Connect:');
+    console.error('  Distribution > App Review Information > Attachment > upload the file,');
+    console.error('which is the same slot this writes to and needs no key at all.');
+    process.exit(1);
+  }
   console.error('ERR', e.message, JSON.stringify(e.body || '').slice(0, 600));
   process.exit(1);
 });
