@@ -134,10 +134,12 @@ The seventh cannot be done from here:
 > has them it must also show the location, photo and App Tracking Transparency
 > prompts, writing a review, adding a photo, and **reporting and blocking**.
 
-Install build 30 from TestFlight and film about two minutes. Then
-`node tools/attach-review-video.js <file>` puts it on the submission itself,
-where the reviewer sees it rather than in a message thread. The nine-shot list
-and a ready-to-send Resolution Center reply are both in APP-REVIEW-REPLY.md.
+Install build 30 from TestFlight and film about two minutes, then attach it
+under **App Review Information → Attachment** so it travels with the submission
+rather than sitting in a message thread. (There is a tool for this, but it
+needs a write-capable API key and there is not one right now — see the section
+on the revoked keys below.) The nine-shot list and a ready-to-send Resolution
+Center reply are both in APP-REVIEW-REPLY.md.
 
 **What the audit caught.** Reading the submission back, and then reading what
 the app actually renders, turned up seven problems. The version record still
