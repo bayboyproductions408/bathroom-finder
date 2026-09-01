@@ -42,7 +42,16 @@ android {
     signingConfigs {
         release {
             if (keystorePropsFile.exists()) {
-                storeFile file(keystoreProps['storeFile'])
+                /* rootProject.file, not file. This block is injected into
+                   app/build.gradle, where a bare file() resolves against the
+                   app module — so a storeFile of "upload-keystore.jks" was
+                   looked for at android/app/upload-keystore.jks, while both CI
+                   and tools/make-keystore.js put it at android/. The build
+                   reached :app:validateSigningRelease after 260 successful
+                   tasks and died there. It had never been caught because the
+                   signing path only runs when the keystore secrets exist,
+                   which on CI they never have. */
+                storeFile rootProject.file(keystoreProps['storeFile'])
                 storePassword keystoreProps['storePassword']
                 keyAlias keystoreProps['keyAlias']
                 keyPassword keystoreProps['keyPassword']

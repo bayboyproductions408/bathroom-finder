@@ -28,3 +28,7 @@ android/.gradle/
 android/build/
 android/app/build/
 *.log
+
+# Built app bundles. Signed artefacts, and 9MB each — they belong in the Play
+# Console, not in git history.
+/dist/
