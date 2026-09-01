@@ -197,22 +197,56 @@ enquiry was posting a metre-accurate position next to the sender's email.
 
 ### What Play is waiting on
 
-The setup checklist is complete and the console no longer lists an outstanding
-declaration. *Send app for review* is still locked, because there is no release
-yet, and that needs two things only you can do:
+**There is a signed bundle ready to upload:** `dist/bathroom-finder-1.6.8-vc1.aab`,
+9.4 MB, versionCode 1, versionName 1.6.8. Built locally on 1 September and
+verified — `jarsigner -verify` reports *jar verified*, signed
+`CN=Bathroom Finder`, certificate good to 2054. The merged manifest in it
+carries the package `com.bathroomfinder.app`, fine and coarse location, the
+`AD_ID` permission and the AdMob application id.
 
-1. **Four repository secrets**, so the Android workflow can sign the bundle:
-   `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
-   `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Without them the build still
-   runs, but produces an unsigned bundle that Play will not accept.
-   `node tools/make-keystore.js` creates the key if it does not exist yet.
+**This does not need the four repository secrets.** Those exist so CI can sign,
+and CI is the better long-term route, but nothing about the first upload
+requires it. Upload the file by hand:
 
-2. **Twelve closed testers, opted in for fourteen consecutive days.** This is a
-   personal-account rule and it gates production for every app on the account —
-   Flappy Birdies is stuck on the same requirement with one tester. Recruit
-   twelve people once and they clear all three apps. The details, including the
-   difference between *invited* and *opted in*, are in CLOSED-TEST-RECRUITING.md.
+> Play Console → **Test and release → Testing → Closed testing** → create a
+> release → upload the `.aab` → add your testers → roll out.
 
+That starts the clock, which is the thing actually standing between this app
+and production: **twelve testers opted in for fourteen consecutive days**. The
+fourteen days count from when the twelfth person opts in, not from when the
+invitations go out, so the sooner the bundle is up and the invitations are
+sent, the sooner it ends. CLOSED-TEST-RECRUITING.md covers the difference
+between *invited* and *opted in*, which is where this usually goes wrong.
+
+It also clears every other app on the account — the twelve-tester rule is an
+account rule, and Flappy Birdies is stuck behind the same one with a single
+tester.
+
+**A bug this build caught.** The release signing config would have failed the
+first time you pasted the secrets in. It is injected into `app/build.gradle`,
+where a bare `file()` resolves against the app module, so a `storeFile` of
+`upload-keystore.jks` was looked for at `android/app/` while both CI and
+`tools/make-keystore.js` put it at `android/`. The build runs 260 tasks and
+then dies at `:app:validateSigningRelease` with a missing-keystore error that
+reads as though the secrets were wrong. It had never fired because that code
+path only runs when a keystore is present, and on CI it never has been. Fixed
+to `rootProject.file()`, and CI re-run green afterwards.
+
+**If you ever need to build one locally again:** delete `android/` and let
+`npx cap add android` regenerate it first. The copy that had been sitting there
+was a stale template from before the Capacitor 8 upgrade — AGP 8.2.1 and Gradle
+8.2.1 — and Gradle 8.2.1 ships an ASM that cannot read the Java 21 class files
+inside bcprov's multi-release jar, so every task died at configuration with
+"Unsupported class file major version 65". The current template generates AGP
+8.13.0 and Gradle 8.14.3 and builds fine. CI was never affected because it
+regenerates on every run. Build with JDK 21 (`dev-tools/jdk21`), not 17.
+
+The upload key is backed up outside the regenerable directory at
+`dev-tools/android-signing/bathroom-finder/`, verified identical to the live
+one. Losing it would mean never being able to update the app, so keep it that
+way — `android/` is gitignored and gets deleted routinely.
+
+---
 
 ## Two App Store Connect keys were revoked (found 1 September)
 
