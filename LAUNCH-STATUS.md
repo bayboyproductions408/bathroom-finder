@@ -195,42 +195,55 @@ see the commits. The Android build had been shipping with the ad SDK stripped
 out by the workflow and with fine location undeclared, and the advertising
 enquiry was posting a metre-accurate position next to the sender's email.
 
-### What Play is waiting on
+### Submitted to Google — 2 September
 
-**There is a signed bundle ready to upload:** `dist/bathroom-finder-1.6.8-vc1.aab`,
-9.4 MB, versionCode 1, versionName 1.6.8. Built locally on 1 September and
-verified — `jarsigner -verify` reports *jar verified*, signed
-`CN=Bathroom Finder`, certificate good to 2054. The merged manifest in it
-carries the package `com.bathroomfinder.app`, fine and coarse location, the
-`AD_ID` permission and the AdMob application id.
+The signed bundle is uploaded and the whole app is **in review**. Publishing
+overview reads *Changes in review*; fifteen changes went in one submission.
 
-**This does not need the four repository secrets.** Those exist so CI can sign,
-and CI is the better long-term route, but nothing about the first upload
-requires it. Upload the file by hand:
+| | |
+|---|---|
+| Track | Closed testing – Alpha |
+| Bundle | `dist/bathroom-finder-1.6.8-vc1.aab` → **version code 1, 1.6.8** |
+| Accepted as | minSdk 24, target SDK 36, 8.96 MB install, ~5s download |
+| Countries | 176 plus *rest of world* |
+| Testers | email lists *Internal testers* and *Reddit T4T Testers* |
+| Feedback channel | bayboyproductions408@gmail.com |
+| Rollout | full rollout to the track |
 
-> Play Console → **Test and release → Testing → Closed testing** → create a
-> release → upload the `.aab` → add your testers → roll out.
+The fifteen changes were the release itself, the country list, the tester and
+feedback settings, the en-US store listing, the IARC content rating, target
+audience, the privacy policy URL, the ads declaration, Data safety, the Health
+apps declaration and the app category. Google quotes **up to 7 days**, usually
+much less for a closed test.
 
-That starts the clock, which is the thing actually standing between this app
-and production: **twelve testers opted in for fourteen consecutive days**. The
-fourteen days count from when the twelfth person opts in, not from when the
-invitations go out, so the sooner the bundle is up and the invitations are
-sent, the sooner it ends. CLOSED-TEST-RECRUITING.md covers the difference
-between *invited* and *opted in*, which is where this usually goes wrong.
+Two warnings came back on the bundle and neither blocks anything: no
+deobfuscation mapping file (the app is not obfuscated, so there is nothing to
+map) and no native debug symbols (the native code is Capacitor's, not ours).
+Both only affect how readable a crash report would be.
 
-It also clears every other app on the account — the twelve-tester rule is an
-account rule, and Flappy Birdies is stuck behind the same one with a single
-tester.
+### The one thing still outstanding: ten more testers
 
-**A bug this build caught.** The release signing config would have failed the
-first time you pasted the secrets in. It is injected into `app/build.gradle`,
-where a bare `file()` resolves against the app module, so a `storeFile` of
-`upload-keystore.jks` was looked for at `android/app/` while both CI and
-`tools/make-keystore.js` put it at `android/`. The build runs 260 tasks and
-then dies at `:app:validateSigningRelease` with a missing-keystore error that
-reads as though the secrets were wrong. It had never fired because that code
-path only runs when a keystore is present, and on CI it never has been. Fixed
-to `rootProject.file()`, and CI re-run green afterwards.
+**There are two testers on the lists.** `bayboyproductions408@gmail.com` and
+`splk3798@gmail.com`. Play requires **twelve** opted in for **fourteen
+consecutive days** before this app — or any other app on this account,
+Flappy Birdies included — can apply for production.
+
+Add them at **Test and release → Testing → Closed testing → Testers**, either
+list. Then send each person the opt-in link from *How testers join your test*
+on the same page; it appears once the release is live. CLOSED-TEST-RECRUITING.md
+covers the part that usually goes wrong: the fourteen days count from when the
+twelfth person **opts in**, not from when you invite them, and Play counts
+opted-in testers, not invitations sent.
+
+**A bug the local build caught.** The release signing config would have failed
+the first time the four GitHub secrets were pasted in. It is injected into
+`app/build.gradle`, where a bare `file()` resolves against the app module, so a
+`storeFile` of `upload-keystore.jks` was looked for at `android/app/` while both
+CI and `tools/make-keystore.js` put it at `android/`. The build runs 260 tasks
+and then dies at `:app:validateSigningRelease` with a missing-keystore error
+that reads as though the secrets were wrong. It had never fired because that
+code path only runs when a keystore is present, and on CI it never has been.
+Fixed to `rootProject.file()`, and CI re-run green afterwards.
 
 **If you ever need to build one locally again:** delete `android/` and let
 `npx cap add android` regenerate it first. The copy that had been sitting there
