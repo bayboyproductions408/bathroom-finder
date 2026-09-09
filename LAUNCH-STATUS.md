@@ -221,19 +221,40 @@ deobfuscation mapping file (the app is not obfuscated, so there is nothing to
 map) and no native debug symbols (the native code is Capacitor's, not ours).
 Both only affect how readable a crash report would be.
 
-### The one thing still outstanding: ten more testers
+### Play review PASSED. The clock has not started — 0 testers opted in
 
-**There are two testers on the lists.** `bayboyproductions408@gmail.com` and
-`splk3798@gmail.com`. Play requires **twelve** opted in for **fourteen
-consecutive days** before this app — or any other app on this account,
-Flappy Birdies included — can apply for production.
+**Checked 8 September.** Publishing overview says *Last published on September 2,
+2026* with nothing pending, and the track reads **Active · 1 (1.6.8) · 177
+countries** — released Sep 2 at 3:52 AM. Google approved everything: the
+release, the listing, the content rating, Data safety, all of it.
 
-Add them at **Test and release → Testing → Closed testing → Testers**, either
-list. Then send each person the opt-in link from *How testers join your test*
-on the same page; it appears once the release is live. CLOSED-TEST-RECRUITING.md
-covers the part that usually goes wrong: the fourteen days count from when the
-twelfth person **opts in**, not from when you invite them, and Play counts
-opted-in testers, not invitations sent.
+**And then nothing happened for six days,** because of the exact trap
+CLOSED-TEST-RECRUITING.md warns about. The Play dashboard is unambiguous:
+
+> ✅ ~~Publish a closed testing release~~
+> ⬜ Have at least 12 testers opted-in to your closed test — ***0 testers currently opted-in***
+> ⬜ Run your closed test with at least 12 testers, for at least 14 days
+
+Two addresses were on the email lists — `bayboyproductions408@gmail.com` and
+`splk3798@gmail.com` — and **neither had opted in.** Being on the list is an
+invitation, not a tester. Play counts only people who have visited the opt-in
+link and pressed *Become a tester*, and until twelve of them have, the
+fourteen-day clock is not running. Six days were spent at zero.
+
+Dom's own account was opted in on 8 September, so the count is now 1 of 12.
+
+**The link to send people** — this is the whole recruitment task:
+
+    https://play.google.com/apps/testing/com.bathroomfinder.app
+
+They open it **signed in to the Google account they use on their Android phone**,
+press *Become a tester*, then install from Play. Being added to the email list
+first is required, so any new address has to go on a list at **Test and release →
+Testing → Closed testing → Testers** before their link will work.
+
+Eleven more people, and the fourteen days start from the day the twelfth opts
+in — not from Sep 2, and not from when the invitations went out. This is an
+**account** rule, so Featherstorm is queued behind the same twelve people.
 
 **A bug the local build caught.** The release signing config would have failed
 the first time the four GitHub secrets were pasted in. It is injected into
@@ -260,6 +281,7 @@ one. Losing it would mean never being able to update the app, so keep it that
 way — `android/` is gitignored and gets deleted routinely.
 
 ---
+
 
 ## Two App Store Connect keys were revoked (found 1 September)
 
